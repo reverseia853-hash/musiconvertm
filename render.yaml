@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: musiconvert
+    runtime: docker
+    plan: 2c-4g
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: WHISPER_MODEL
+        value: small
+      - key: WHISPER_LANG
+        value: es
+      - key: MAX_MINUTES
+        value: "12"
+      - key: MAX_UPLOAD_MB
+        value: "90"
+      - key: APP_AUTH_REQUIRED
+        value: "true"
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_SESSION_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"

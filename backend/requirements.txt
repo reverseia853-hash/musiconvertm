@@ -1,0 +1,21 @@
+fastapi>=0.115
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+faster-whisper==1.0.3
+requests
+yt-dlp[default]
+
+# Dependencias de Demucs (separación de voz).
+# El paquete "demucs" se instala aparte, con: pip install --no-deps demucs
+# (así pip no intenta bajar una versión vieja de torchaudio)
+torch==2.5.1
+torchaudio==2.5.1
+dora-search
+einops
+julius>=0.2.3
+lameenc>=1.2
+openunmix
+pyyaml
+safetensors
+sphn
+tqdm

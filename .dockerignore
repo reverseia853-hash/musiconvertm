@@ -1,0 +1,8 @@
+.git
+.venv
+.venv-*/
+backend/venv
+backend/uploads
+**/__pycache__
+**/*.py[cod]
+.vscode

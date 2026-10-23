@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="es" class="auth-check">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Musiconvert</title>
+<meta name="description" content="Convierte canciones en letras sincronizadas y practica con acordes, tempo y un reproductor tipo karaoke." />
+<meta name="theme-color" content="#0a0a0f" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%232dd4a7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%230a0a0f'/%3E%3Ctext x='32' y='49' font-family='Arial' font-weight='900' font-size='46' text-anchor='middle' fill='url(%23g)'%3EM%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --panel: #14141c;
+    --panel2: #1d1d29;
+    --text: #9b99b0;
+    --active: #ffffff;
+    --accent: #8b5cf6;
+    --accent2: #2dd4a7;
+    --sung: #ece8ff;
+    --border: #262634;
+    --fs: 1;
+  }
+  * { box-sizing: border-box; }
+  button, input, select { font: inherit; }
+  button, select, input[type="checkbox"], input[type="range"] { touch-action: manipulation; }
+  :focus-visible { outline: 3px solid var(--accent2); outline-offset: 3px; }
+  .url-form input:focus-visible, .line.edit .txt:focus-visible,
+  #lyricsDlg textarea:focus-visible, #measureDlg textarea:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  body {
+    margin: 0; min-height: 100vh; padding-bottom: 84px;
+    background: radial-gradient(1200px 500px at 50% -200px, rgba(139,92,246,.16), transparent), var(--bg);
+    background-attachment: fixed; color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 12px 20px 10px; position: sticky; top: 0; z-index: 10;
+    background: rgba(10,10,15,.88); backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+  }
+  .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; margin-right: 8px; user-select: none; }
+  .brand .m {
+    font-size: 2.6rem; font-weight: 900; line-height: .9; letter-spacing: -3px; padding-right: 2px;
+    background: linear-gradient(135deg, var(--accent) 10%, var(--accent2) 95%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand .rest { font-size: 1.2rem; font-weight: 700; color: var(--active); letter-spacing: -.3px; }
+  .file-btn {
+    background: linear-gradient(135deg, var(--accent), #6d4ae0); color: #fff; border: 0; border-radius: 999px;
+    min-height: 44px; padding: 9px 18px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,.35);
+  }
+  .file-btn:hover { filter: brightness(1.12); }
+  .file-btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+  .ghost {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+    min-height: 44px; border-radius: 999px; padding: 8px 15px; font-weight: 600; cursor: pointer;
+  }
+  .ghost:hover { color: var(--active); border-color: var(--text); }
+  .ghost.on { color: #fff; border-color: var(--accent2); background: rgba(45,212,167,.12); }
+  .url-form { display: flex; gap: 8px; flex: 1 1 260px; min-width: 200px; }
+  .url-form input {
+    flex: 1; min-width: 0; min-height: 44px; padding: 9px 16px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--active);
+  }
+  .url-form input:focus { outline: 2px solid var(--accent); }
+  .opt { font-size: .85rem; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  select, #opts select {
+    background: var(--panel2); color: var(--active); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 6px;
+  }
+  #opts { display: none; gap: 18px; flex-wrap: wrap; align-items: center; padding: 12px 2px 2px; }
+  body.opts #opts { display: flex; }
+  #songline { font-size: .85rem; padding: 6px 2px 0; color: var(--text); }
+  #fileName { color: var(--active); font-weight: 600; }
+  #status { padding: 10px 20px; font-size: .9rem; max-width: 880px; margin: 0 auto; }
+  #bar { height: 3px; background: var(--border); }
+  #barFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .4s; }
+  #recovery { max-width: 880px; margin: 0 auto; padding: 0 20px 12px; }
+  #recovery[hidden] { display: none; }
+  #recovery .recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  #status[role="alert"] { color: #ffb4ab; }
+  html.auth-check body > :not(#authGate), body.auth-locked > :not(#authGate) {
+    visibility: hidden !important; pointer-events: none !important;
+  }
+  #authGate {
+    position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center;
+    padding: 20px; background: var(--bg);
+  }
+  #authGate[hidden] { display: none; }
+  .auth-card {
+    width: min(420px, 100%); padding: clamp(24px, 6vw, 40px);
+    border: 1px solid var(--border); border-radius: 22px;
+    background: linear-gradient(145deg, var(--panel2), var(--panel));
+    box-shadow: 0 24px 80px rgba(0,0,0,.4);
+  }
+  .auth-card h1 { margin: 0 0 8px; color: var(--active); font-size: 1.6rem; }
+  .auth-card p { margin: 0 0 20px; line-height: 1.55; }
+  .auth-card form { display: grid; gap: 12px; }
+  .auth-card form[hidden], #logoutBtn[hidden] { display: none; }
+  .auth-card input {
+    width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--bg); color: var(--active);
+  }
+  #authMessage { min-height: 1.4em; margin-top: 12px; color: #ffb4ab; font-size: .9rem; }
+
+  /* pantalla inicial */
+  #lyrics.welcome-mode { max-width: 960px; padding: 8vh 22px 12vh; }
+  .welcome { overflow: hidden; position: relative; padding: clamp(24px, 5vw, 52px); border: 1px solid var(--border); border-radius: 26px; background: radial-gradient(600px 260px at 50% 0, rgba(139,92,246,.16), transparent), linear-gradient(145deg, rgba(29,29,41,.96), rgba(20,20,28,.96)); box-shadow: 0 24px 80px rgba(0,0,0,.28); text-align: center; }
+  .welcome-mark { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 18px; border: 1px solid rgba(45,212,167,.28); border-radius: 18px; background: rgba(45,212,167,.1); color: var(--accent2); font-size: 1.8rem; }
+  .welcome h1 { margin: 0; color: var(--active); font-size: clamp(1.8rem, 4vw, 2.7rem); line-height: 1.12; letter-spacing: -.7px; }
+  .welcome-copy { max-width: 570px; margin: 14px auto 24px; font-size: 1rem; line-height: 1.65; }
+  .welcome .file-btn { padding: 12px 22px; font-size: .98rem; }
+  .welcome-hint { margin: 10px 0 0; font-size: .78rem; opacity: .75; }
+  .welcome-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 30px; text-align: left; }
+  .welcome-step { padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: rgba(10,10,15,.32); }
+  .welcome-step strong { display: flex; gap: 9px; align-items: center; margin-bottom: 6px; color: var(--active); font-size: .9rem; }
+  .welcome-step strong span { display: grid; place-items: center; width: 25px; height: 25px; flex: 0 0 auto; border-radius: 50%; background: rgba(139,92,246,.18); color: #c4b5fd; font-size: .78rem; }
+  .welcome-step p { margin: 0; font-size: .8rem; line-height: 1.5; }
+
+  /* pestañas y paneles */
+  #tabs { display: none; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  body.hasLyrics #tabs { display: flex; }
+  .tab {
+    min-height: 44px; background: transparent; border: 0; color: var(--text); padding: 7px 14px; border-radius: 999px;
+    font-weight: 600; cursor: pointer; font-size: .88rem;
+  }
+  .tab:hover { color: var(--active); }
+  .tab.on { background: var(--panel2); color: #fff; box-shadow: inset 0 0 0 1px var(--border); }
+  .panel { display: none; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 2px 4px; font-size: .85rem; }
+  body[data-tab="chords"] #p-chords, body[data-tab="tempo"] #p-tempo,
+  body[data-tab="view"] #p-view, body[data-tab="export"] #p-export { display: flex; }
+  .panel b { color: var(--active); }
+  .chordonly { display: none !important; }
+  body.hasChords:not(.editing) .chordonly { display: inline-flex !important; }
+  body.hasChords:not(.editing) .hint.chordonly { display: inline !important; }
+  .tr { display: inline-flex; gap: 6px; align-items: center; }
+  .ib {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    min-width: 44px; min-height: 44px; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: .85rem;
+  }
+  .ib:hover { color: #fff; border-color: var(--text); }
+  .ib.big { padding: 8px 16px; font-weight: 700; color: #fff; background: rgba(139,92,246,.22); border-color: var(--accent); }
+  .hint { font-size: .78rem; opacity: .85; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  .line-play:focus-visible {
+    position: static; width: auto; height: auto; margin: 0 8px 0 0; padding: 5px 10px;
+    overflow: visible; clip: auto; white-space: normal; border: 1px solid var(--accent2);
+    border-radius: 999px; background: var(--panel2); color: var(--active); font-size: .75rem;
+  }
+  #dots { display: inline-flex; gap: 7px; align-items: center; }
+  #dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); display: inline-block; }
+  #dots i:first-child { width: 15px; height: 15px; }
+  #dots i.on { background: var(--accent); }
+  #dots i.on:first-child { background: var(--accent2); }
+  .bpmbig { font-size: 1.5rem; font-weight: 800; color: #fff; min-width: 3.6ch; text-align: center; }
+
+  #editbar {
+    display: none; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+    font-size: .85rem; position: sticky; top: var(--hh, 0px); z-index: 9;
+  }
+  body.editing #editbar { display: flex; }
+
+  /* letra */
+  #lyrics { max-width: 900px; margin: 0 auto; padding: 36vh 22px 50vh; text-align: left; }
+  body.editing #lyrics { padding-top: 24px; padding-bottom: 40vh; }
+  .line {
+    font-size: calc(var(--fs) * clamp(1.5rem, 3.4vw, 2.4rem)); font-weight: 800; letter-spacing: -.3px;
+    line-height: 1.5; margin: 14px 0; opacity: .3; transform-origin: left center;
+    transition: opacity .25s, transform .25s; cursor: pointer;
+  }
+  .line:hover { opacity: .55; }
+  .line.active { opacity: 1; transform: scale(1.02); }
+  .line.past { opacity: .45; }
+  .w { transition: color .12s; }
+  .w.sung { color: var(--sung); }
+  .line.active .w.now { color: #fff; text-shadow: 0 0 18px var(--accent); }
+  .empty { padding-top: 10vh; font-size: 1rem; text-align: center; font-weight: 400; opacity: 1; }
+  .wrap { position: relative; display: inline-block; vertical-align: bottom; }
+  .ch {
+    display: flex; align-items: flex-end; min-height: 44px; padding-bottom: 3px;
+    font-size: .5em; font-weight: 800; color: var(--accent2);
+    white-space: nowrap; letter-spacing: .2px; line-height: 1;
+  }
+  .cs { min-height: 44px; color: inherit; background: transparent; border: 0; cursor: pointer; border-radius: 4px; padding: 0 3px; font: inherit; }
+  .cs:hover { background: rgba(255,255,255,.15); }
+  .cs.low { text-decoration: underline dotted; opacity: .8; }
+  .cs.low::after { content: "?"; }
+  body.hasChords.showCh .line { margin-top: 14px; }
+  .wrap.sung .ch { color: var(--sung); }
+  .line.active .wrap.now .ch { color: #fff; }
+
+  #chordMenu {
+    position: fixed; z-index: 50; display: none; min-width: 230px; padding: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 34px rgba(0,0,0,.55); font-size: .85rem;
+  }
+  #chordMenu.on { display: block; }
+  #chordMenu h4 { margin: 0 0 8px; font-size: .9rem; color: var(--active); }
+  #chordMenu .row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+  #measureDlg, #lyricsDlg {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 16px; width: min(700px, 92vw); padding: 18px;
+  }
+  #lyricsDlg::backdrop, #measureDlg::backdrop { background: rgba(0,0,0,.65); }
+  #lyricsDlg h3, #measureDlg h3 { margin: 0 0 6px; color: var(--active); }
+  #lyricsDlg textarea, #measureDlg textarea {
+    width: 100%; height: 110px; background: var(--bg); color: var(--active);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px; font: inherit;
+  }
+  #lyricsOut, #measureOut { margin: 12px 0; font-size: .9rem; line-height: 1.5; max-height: 38vh; overflow: auto; }
+  #measureOut table { border-collapse: collapse; margin-top: 6px; }
+  #measureOut td, #measureOut th { border: 1px solid var(--border); padding: 3px 10px; text-align: center; }
+  #lyricsOut .big, #measureOut .big { font-size: 1.6rem; font-weight: 800; color: var(--active); }
+  .dlgbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* modo edición */
+  .line.edit {
+    display: flex; gap: 8px; align-items: center; font-size: 1rem; font-weight: 400; margin: 6px 0;
+    opacity: .8; transform: none; cursor: default; letter-spacing: 0;
+  }
+  .line.edit.active { opacity: 1; transform: none; outline: 1px solid var(--accent); border-radius: 10px; }
+  .line.edit .time { font-variant-numeric: tabular-nums; min-width: 48px; font-size: .8rem; }
+  .line.edit .txt {
+    flex: 1; min-width: 0; padding: 8px 12px; border-radius: 10px; font-size: 1rem;
+    border: 1px solid var(--border); background: var(--panel); color: var(--active);
+  }
+  .line.edit .txt:focus { outline: 2px solid var(--accent); }
+
+  /* reproductor inferior */
+  #dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 12px; align-items: center;
+    padding: 12px 20px; background: rgba(20,20,28,.92); backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+  }
+  #playBtn {
+    width: 48px; height: 48px; border-radius: 50%; border: 0; cursor: pointer; font-size: 1.1rem;
+    color: #0a0a0f; background: var(--accent2); flex: 0 0 auto; box-shadow: 0 4px 16px rgba(45,212,167,.35);
+  }
+  #playBtn:hover { filter: brightness(1.1); }
+  #dock .tm { font-variant-numeric: tabular-nums; font-size: .8rem; min-width: 42px; text-align: center; }
+  #seek { flex: 1; min-width: 80px; min-height: 44px; accent-color: var(--accent2); }
+  #exitStage { display: none; position: fixed; top: 14px; right: 14px; z-index: 30; }
+
+  /* modo escenario */
+  body.stage header, body.stage #status, body.stage #bar, body.stage #editbar { display: none !important; }
+  body.stage #exitStage { display: inline-block; }
+  body.stage { --fs: 1.35; background: #000; }
+  body.stage #lyrics { max-width: 1200px; padding-top: 30vh; }
+  body.stage .line { opacity: .22; }
+  body.stage .line.active { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+
+  @media (max-width: 640px) {
+    header { position: relative; padding: 10px 12px 8px; }
+    body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+    .top { gap: 8px; }
+    .brand { margin-right: auto; }
+    .url-form input { padding: 9px 12px; }
+    .url-form { flex-basis: 100%; }
+    #lyrics { padding-left: 14px; padding-right: 14px; }
+    #lyrics.welcome-mode { padding: 24px 14px 36px; }
+    .welcome { padding: 24px 18px; border-radius: 20px; }
+    .welcome-steps { grid-template-columns: 1fr; gap: 8px; margin-top: 22px; }
+    .welcome-step { display: grid; grid-template-columns: minmax(105px, .8fr) 1.2fr; gap: 12px; align-items: start; padding: 12px; }
+    .welcome-step strong { margin: 0; }
+    #dock { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 6px; }
+    #speed { display: none; }
+    #dock .tm { min-width: 36px; font-size: .75rem; }
+    #playBtn { width: 48px; height: 48px; }
+    #seek { min-width: 48px; }
+    #editbar { padding: 10px 12px; gap: 8px; }
+    #recovery { padding: 0 12px 10px; }
+    .panel { gap: 8px; padding: 10px 0 4px; }
+    .panel .hint { flex-basis: 100%; line-height: 1.5; }
+    .line { overflow-wrap: anywhere; }
+  }
+  @media (max-width: 360px) {
+    header { padding-left: 8px; padding-right: 8px; }
+    #dock { padding-left: 8px; padding-right: 8px; }
+    .ghost { padding-left: 10px; padding-right: 10px; }
+    .welcome-step { grid-template-columns: 1fr; gap: 5px; }
+  }
+</style>
+</head>
+<body>
+<section id="authGate" aria-labelledby="authTitle" aria-live="polite">
+  <div class="auth-card">
+    <h1 id="authTitle">Musiconvert</h1>
+    <p id="authIntro">Comprobando el acceso seguro…</p>
+    <form id="authForm" hidden>
+      <label for="authPassword">Contraseña de acceso</label>
+      <input id="authPassword" name="password" type="password" autocomplete="current-password" required maxlength="1024" />
+      <button class="file-btn" id="authSubmit" type="submit">Entrar</button>
+    </form>
+    <div id="authMessage" role="alert"></div>
+  </div>
+</section>
+<header>
+  <div class="top">
+    <div class="brand" title="Musiconvert"><span class="m">M</span><span class="rest">usiconvert</span></div>
+    <button class="file-btn" id="pick" type="button">＋ Elegir canción</button>
+    <input type="file" id="file" accept="audio/*,video/mp4,.mp3,.wav,.m4a,.flac,.ogg,.aac" aria-label="Elegir archivo de audio" hidden />
+    <form id="urlForm" class="url-form">
+      <input type="url" id="url" placeholder="o pega un link de YouTube" aria-label="Enlace de YouTube" autocomplete="url" />
+      <button type="submit" class="file-btn">Generar</button>
+    </form>
+    <button class="ghost" id="optBtn" type="button" aria-expanded="false" aria-controls="opts" title="Calidad, separar voz, acordes">⚙ Opciones</button>
+    <button class="ghost" id="editBtn" type="button" aria-pressed="false" disabled>✏️ Editar</button>
+    <button class="ghost" id="stageBtn" type="button" aria-pressed="false" aria-label="Activar modo escenario a pantalla completa" title="Letra grande a pantalla completa">⛶ Escenario</button>
+    <button class="ghost" id="logoutBtn" type="button" hidden>Cerrar sesión</button>
+  </div>
+  <div id="opts">
+    <label class="opt" title="Aísla la voz antes de transcribir: más lento pero más preciso">
+      <input type="checkbox" id="separate" checked /> Separar voz
+    </label>
+    <label class="opt" title="Más grande = más preciso pero más lento. 'máxima' es lo mejor para la letra.">
+      Calidad
+      <select id="quality">
+        <option value="base">rápida</option>
+        <option value="small" selected>normal</option>
+        <option value="medium">máxima (lenta)</option>
+      </select>
+    </label>
+    <label class="opt" title="Detecta los acordes del audio original">
+      <input type="checkbox" id="chordsOpt" checked /> Acordes
+    </label>
+  </div>
+  <div id="songline"><span id="fileName"></span></div>
+  <nav id="tabs" aria-label="Herramientas de canción">
+    <button class="tab chordonly" data-tab="chords" aria-controls="p-chords" aria-expanded="false">🎸 Acordes</button>
+    <button class="tab" data-tab="tempo" aria-controls="p-tempo" aria-expanded="false">♩ Tempo</button>
+    <button class="tab" data-tab="view" aria-controls="p-view" aria-expanded="false">Aa Vista y sincronía</button>
+    <button class="tab" data-tab="export" aria-controls="p-export" aria-expanded="false">⬇ Exportar</button>
+  </nav>
+
+  <div id="p-chords" class="panel" role="region" aria-label="Herramientas de acordes">
+    <span class="chordonly tr">Tono: <b id="keyTxt">–</b></span>
+    <span class="tr chordonly">Transponer
+      <button class="ib" id="trDown" title="Bajar un semitono">−</button>
+      <b id="trVal">0</b>
+      <button class="ib" id="trUp" title="Subir un semitono">＋</button>
+    </span>
+    <label class="tr chordonly">Capo <select id="capo"></select></label>
+    <span id="shapeTxt" class="chordonly"></span>
+    <label class="opt chordonly"><input type="checkbox" id="showCh" checked /> Mostrar acordes</label>
+    <button class="ib chordonly" id="measureBtn" title="Compara con los acordes reales y calcula el % de acierto">📊 Medir acierto</button>
+    <span class="hint chordonly">Los acordes con <u>?</u> son dudosos: haz clic en ellos para corregirlos.</span>
+  </div>
+
+  <div id="p-tempo" class="panel" role="region" aria-label="Herramientas de tempo">
+    <span class="tr">
+      <button class="ib" id="bpmMinus" title="Bajar 0.5 BPM (el pulso de donde estás escuchando no se mueve)">−</button>
+      <span class="bpmbig" id="bpmTxt">–</span>
+      <button class="ib" id="bpmPlus" title="Subir 0.5 BPM">＋</button> BPM
+    </span>
+    <button class="ib" id="bpmHalf" title="El tempo mostrado es el doble del real">÷2</button>
+    <button class="ib" id="bpmDouble" title="El tempo mostrado es la mitad del real">×2</button>
+    <span id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <button class="ib big" id="tapBtn" title="Toca al ritmo de la canción (o tecla T), 4 o más veces">👆 Tocar el ritmo</button>
+    <span id="tapInfo" class="hint" aria-live="polite"></span>
+    <button class="ib" id="downBtn" title="Pausa o escucha el primer tiempo del compás y pulsa aquí (o tecla 1)">① El 1 está aquí</button>
+    <span class="tr" title="Mueve todos los pulsos un poco antes o después">Pulsos
+      <button class="ib" id="beatBack" aria-label="Mover los pulsos antes">◀</button><button class="ib" id="beatFwd" aria-label="Mover los pulsos después">▶</button>
+    </span>
+    <label class="opt"><input type="checkbox" id="clickOpt" /> 🔔 Click</label>
+    <span class="hint">Cómo usarlo: dale play, <b>toca al ritmo 4–8 veces</b> y ajusta con − ＋ hasta que el click coincida. Cuando oigas el primer tiempo del compás, pulsa <b>① El 1 está aquí</b>.</span>
+  </div>
+
+  <div id="p-view" class="panel" role="region" aria-label="Vista y sincronización">
+    <span class="tr">Tamaño de letra
+      <button class="ib" id="fsDown">A−</button><button class="ib" id="fsUp">A＋</button>
+    </span>
+    <span class="tr" title="Mueve el resaltado de TODA la letra un poco antes o después, sin tocar el audio">
+      ¿Letra desfasada?
+      <button class="ib" id="syDown">−</button>
+      <b id="syVal">0.0 s</b>
+      <button class="ib" id="syUp">＋</button>
+      <span class="hint">＋ si la palabra se ilumina <u>después</u> de oírla · − si se ilumina <u>antes</u></span>
+    </span>
+  </div>
+
+  <div id="p-export" class="panel" role="region" aria-label="Opciones de exportación">
+    <button class="ib big" id="pdfBtn" title="Descarga la letra (con acordes si hay) como PDF">📕 Descargar PDF</button>
+    <button class="ib big" id="pngBtn" title="Descarga la letra (con acordes si hay) como imagen PNG">🖼️ Descargar imagen</button>
+    <button class="ib chordonly" id="sheetBtn" title="Copia la letra con los acordes encima">📄 Copiar hoja de acordes</button>
+  </div>
+</header>
+<button class="ghost" id="exitStage" type="button" aria-label="Salir del modo escenario">✕ Salir</button>
+<div id="bar" role="progressbar" aria-label="Progreso del procesamiento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="barFill"></div></div>
+<div id="editbar">
+  <span>Modo edición:</span>
+  <button class="ghost" id="addBtn">＋ Línea en el tiempo actual</button>
+  <button class="ghost" id="retryBtn" title="Pausa justo donde empieza la parte mala y pulsa aquí">
+    🔁 Re-transcribir desde el tiempo actual
+  </button>
+  <button class="ghost" id="realBtn" title="Pega la letra correcta: se mide el acierto y se corrige conservando los tiempos">📝 Pegar letra real</button>
+  <button class="ghost" id="copyBtn">📋 Copiar letra</button>
+  <span>Pausa la canción donde quieras usar ⏱ (marcar inicio) o ＋.</span>
+</div>
+<div id="status" role="status" aria-live="polite" aria-atomic="true">Elige un archivo de audio o pega un link para generar la letra.</div>
+<div id="recovery" hidden>
+  <div class="recovery-actions">
+    <button class="file-btn" id="retryAction" type="button">Reintentar</button>
+    <button class="ghost" id="chooseAnother" type="button">Elegir otro archivo</button>
+  </div>
+</div>
+<main id="lyrics" class="welcome-mode">
+  <section class="welcome">
+    <div class="welcome-mark" aria-hidden="true">♫</div>
+    <h1>Tu canción, lista para cantar</h1>
+    <p class="welcome-copy">Genera una letra sincronizada con el audio, ajústala a tu gusto y, si quieres, acompáñala con acordes y tempo.</p>
+    <button class="file-btn" id="welcomePick" type="button">＋ Elegir archivo de audio</button>
+    <p class="welcome-hint">Audio de hasta 90 MB. También puedes pegar un enlace de YouTube arriba.</p>
+    <div class="welcome-steps">
+      <div class="welcome-step">
+        <strong><span>1</span> Elige una canción</strong>
+        <p>Sube un archivo compatible o pega el enlace de un video.</p>
+      </div>
+      <div class="welcome-step">
+        <strong><span>2</span> Procesamos el audio</strong>
+        <p>La app prepara la letra; separar la voz puede mejorar el resultado y tarda más.</p>
+      </div>
+      <div class="welcome-step">
+        <strong><span>3</span> Revisa y disfruta</strong>
+        <p>Sincroniza, edita la letra y descarga tu hoja cuando esté lista.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="dock">
+  <button id="playBtn" type="button" aria-label="Reproducir" aria-pressed="false" title="Reproducir / pausar (barra espaciadora)">▶</button>
+  <span class="tm" id="tCur">0:00</span>
+  <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Posición de reproducción" />
+  <span class="tm" id="tDur" aria-label="Duración">0:00</span>
+  <select id="speed" aria-label="Velocidad de reproducción" title="Velocidad">
+    <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+    <option value="1" selected>1×</option><option value="1.25">1.25×</option>
+  </select>
+</div>
+<audio id="player" preload="auto"></audio>
+
+<div id="chordMenu" role="dialog" aria-labelledby="cmTitle" aria-modal="false" tabindex="-1">
+  <h4 id="cmTitle"></h4>
+  <div class="row" id="cmAlts"></div>
+  <div class="row"><select id="cmSel" aria-label="Cambiar acorde"></select></div>
+  <label class="row"><input type="checkbox" id="cmAll" /> <span id="cmAllTxt"></span></label>
+  <div class="row"><button class="ib" id="cmClose">Cerrar</button></div>
+</div>
+<dialog id="lyricsDlg" aria-labelledby="lyricsDlgTitle">
+  <h3 id="lyricsDlgTitle">📝 Letra real: medir acierto y corregir</h3>
+  <p class="hint">Pega la letra <b>correcta</b> (una frase por renglón, por ejemplo copiada de una página de letras).
+     Se compara con lo que transcribió la app y se calcula el % de palabras acertadas. Al corregir, la letra
+     se reemplaza por la que pegaste <b>conservando los tiempos</b> de las palabras que coinciden.</p>
+  <textarea id="lyricsTxt" aria-label="Letra correcta" placeholder="Pega aquí la letra correcta…"></textarea>
+  <div id="lyricsOut" aria-live="polite"></div>
+  <div class="dlgbtns">
+    <button class="file-btn" id="lyricsGo">Calcular acierto</button>
+    <button class="ghost" id="lyricsFix" disabled>Corregir con esta letra</button>
+    <button class="ghost" id="lyricsClose">Cerrar</button>
+  </div>
+</dialog>
+<dialog id="measureDlg" aria-labelledby="measureDlgTitle">
+  <h3 id="measureDlgTitle">📊 Medir el acierto de los acordes</h3>
+  <p class="hint">Pega aquí los acordes <b>reales</b> de la canción, en orden (por ejemplo copiados de una página de acordes):
+     <code>Am F C G Am F C G …</code>. Las séptimas se cuentan como el acorde básico (A7 = A, Am7 = Am).
+     Puedes pegar solo una parte de la canción. Usa nombres en inglés (C D E F G A B).</p>
+  <textarea id="measureTxt" aria-label="Acordes reales de la canción" placeholder="Am F C G Am F C G"></textarea>
+  <div id="measureOut" aria-live="polite"></div>
+  <div class="dlgbtns">
+    <button class="file-btn" id="measureGo">Calcular</button>
+    <button class="ghost" id="measureFix" disabled>Corregir con estos acordes</button>
+    <button class="ghost" id="measureClose">Cerrar</button>
+  </div>
+</dialog>
+<script>
+const $ = (id) => document.getElementById(id);
+const player = $("player"), lyricsEl = $("lyrics"), statusEl = $("status"), barFill = $("barFill");
+document.querySelectorAll("button[title]:not([aria-label])").forEach((button) => button.setAttribute("aria-label", button.title));
+
+let authRequired = false;
+function lockApp(message) {
+  player.pause();
+  document.body.classList.add("auth-locked");
+  $("authGate").hidden = false;
+  $("authForm").hidden = false;
+  $("authIntro").textContent = "Ingresa la contraseña para usar el procesamiento de canciones.";
+  $("authMessage").textContent = message;
+  $("authPassword").focus();
+}
+
+function unlockApp() {
+  document.body.classList.remove("auth-locked");
+  document.documentElement.classList.remove("auth-check");
+  $("authGate").hidden = true;
+  $("authPassword").value = "";
+  $("authMessage").textContent = "";
+  $("logoutBtn").hidden = !authRequired;
+}
+
+async function initializeAuth() {
+  try {
+    const response = await fetch("/api/auth/session", { credentials: "same-origin" });
+    if (!response.ok) throw new Error(`No se pudo comprobar el acceso (HTTP ${response.status}).`);
+    const session = await response.json();
+    authRequired = session.required === true;
+    if (session.authenticated === true) unlockApp();
+    else lockApp("Es necesario iniciar sesión para continuar.");
+  } catch (error) {
+    authRequired = true;
+    lockApp(`No se pudo comprobar el acceso. ${error.message}`);
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const response = await fetch(url, { ...options, credentials: "same-origin" });
+  if (response.status === 401 && authRequired) {
+    clearTimeout(pollTimer);
+    pollGeneration++;
+    busy = false;
+    lockApp("La sesión venció o ya no es válida. Inicia sesión nuevamente.");
+  }
+  return response;
+}
+
+$("authForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = $("authSubmit");
+  submit.disabled = true;
+  $("authMessage").textContent = "";
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password: $("authPassword").value }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `Error HTTP ${response.status}.`);
+    authRequired = result.authenticated === true;
+    unlockApp();
+  } catch (error) {
+    $("authMessage").textContent = error.message || "No se pudo iniciar sesión.";
+    $("authPassword").focus();
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  try {
+    const response = await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+    if (!response.ok) throw new Error(`No se pudo cerrar sesión (HTTP ${response.status}).`);
+    player.pause();
+    lockApp("La sesión se cerró correctamente.");
+  } catch (error) {
+    setStatus(error.message, 0, true);
+  }
+});
+
+void initializeAuth();
+
+let lines = [];          // [{start,end,text,words:[{word,start,end}]}]
+let lineEls = [];
+let wordEls = [];        // wordEls[i] = spans de la línea i (vacío en modo edición)
+let activeIdx = -1;
+let pollTimer = null;
+let pollGeneration = 0;
+let editMode = false;
+let currentJobId = null; // trabajo principal (para re-transcribir)
+let busy = false;
+let recoveryAction = null;
+let chords = [];         // [{start,end,chord}]
+let songKey = "";
+let transpose = 0, capo = 0;
+let lyricShift = 0;      // segundos: (+) adelanta el resaltado de la letra respecto al audio
+let baseBpm = 0, baseBeats = [], baseDown = 0;   // tempo detectado (tiempos de audio)
+let beatMode = 1, beatPhase = 0, shownBeats = [], lastBeat = -1;
+const toAudio = (x) => x - lyricShift;           // tiempo de letra -> tiempo de audio
+const lyricNow = () => r2(player.currentTime + lyricShift);
+const headerEl = document.querySelector("header");
+const syncHeaderHeight = () =>
+  document.documentElement.style.setProperty("--hh", headerEl.offsetHeight + "px");
+new ResizeObserver(syncHeaderHeight).observe(headerEl);
+syncHeaderHeight();
+const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+const fmt = (t) => Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0");
+const r2 = (x) => Math.round(x * 100) / 100;
+
+$("pick").onclick = () => $("file").click();
+$("welcomePick").onclick = () => $("file").click();
+
+/* ------------------------------------------------------------ enviar trabajos */
+function buildJobForm(submission) {
+  const form = new FormData();
+  form.append(submission.type === "file" ? "file" : "url", submission.value);
+  form.append("separate", submission.separate ? "true" : "false");
+  form.append("chords", submission.chords ? "true" : "false");
+  form.append("quality", submission.quality);
+  return form;
+}
+
+async function startJob(submission) {
+  const label = submission.label;
+  pollGeneration++;
+  clearTimeout(pollTimer);
+  busy = true;
+  if (editMode) setEdit(false);
+  currentJobId = null;
+  $("editBtn").disabled = true;
+  clearLyrics();
+  player.pause();
+  $("fileName").textContent = label || "";
+  setStatus("Enviando…", 0);
+  try {
+    const job_id = await postJob("/api/jobs", buildJobForm(submission));
+    poll(job_id, (job) => {
+      currentJobId = job_id;
+      lines = job.result;
+      chords = job.chords || [];
+      songKey = job.key || "";
+      transpose = 0; capo = 0; lyricShift = 0;
+      baseBpm = job.bpm || 0; baseBeats = job.beats || []; baseDown = job.downbeat || 0;
+      beatMode = 1;
+      document.body.classList.add("hasLyrics");
+      document.body.classList.toggle("hasTempo", baseBpm > 0 && baseBeats.length > 8);
+      updateTempo(true);
+      $("editBtn").disabled = false;
+      document.body.classList.toggle("hasChords", chords.length > 0);
+      updateChordBar();
+      let msg = "Listo ✔ Dale play. Si algo salió mal, usa ✏️ Editar.";
+      if (job.chords_error) msg += " (No se pudieron detectar los acordes: " + job.chords_error + ")";
+      if (job.separate_error) msg += " (No se pudo separar la voz, se usó el audio original: " + job.separate_error + ")";
+      setStatus(msg, 1);
+      render();
+    }, true, () => startJob(submission));
+  } catch (err) {
+    busy = false;
+    showFailure(`No se pudo iniciar el procesamiento. ${err.message}`, canRetry(err) ? () => startJob(submission) : null);
+  }
+}
+
+async function postJob(url, form) {
+  const res = await apiFetch(url, { method: "POST", body: form });
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch {}
+  if (!res.ok) {
+    const error = new Error(typeof body?.detail === "string" ? body.detail : `${res.status || ""} ${res.statusText || "Error del servidor"}`.trim());
+    error.status = res.status;
+    throw error;
+  }
+  if (!body || typeof body.job_id !== "string") throw new Error("El servidor devolvió una respuesta inesperada.");
+  return body.job_id;
+}
+
+$("file").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  player.src = URL.createObjectURL(file);
+  startJob({
+    type: "file", value: file, label: file.name,
+    separate: $("separate").checked, chords: $("chordsOpt").checked, quality: $("quality").value,
+  });
+  e.target.value = "";
+};
+
+$("urlForm").onsubmit = (e) => {
+  e.preventDefault();
+  const link = $("url").value.trim();
+  if (!link) return;
+  startJob({
+    type: "url", value: link, label: "YouTube",
+    separate: $("separate").checked, chords: $("chordsOpt").checked, quality: $("quality").value,
+  });
+};
+
+function canRetry(error) {
+  return !(error.status >= 400 && error.status < 500);
+}
+
+/* ------------------------------------------------------------------- polling */
+function poll(jobId, onDone, isMain, onRetry) {
+  pollGeneration++;
+  const generation = pollGeneration;
+  clearTimeout(pollTimer);
+  busy = true;
+  let audioLoaded = false;
+  let connectionFailures = 0;
+  const stop = () => {
+    clearTimeout(pollTimer);
+    if (generation === pollGeneration) busy = false;
+  };
+
+  const check = async () => {
+    let job;
+    try {
+      const res = await apiFetch("/api/jobs/" + encodeURIComponent(jobId));
+      const text = await res.text();
+      job = null;
+      try { job = text ? JSON.parse(text) : null; } catch {}
+      if (!res.ok) {
+        const error = new Error(typeof job?.detail === "string" ? job.detail : `${res.status} ${res.statusText}`.trim());
+        error.status = res.status;
+        throw error;
+      }
+      if (!job || typeof job.status !== "string") throw new Error("El servidor devolvió un estado de trabajo no válido.");
+      if (!["queued", "downloading", "separating", "loading_model", "transcribing", "chords", "error", "done"].includes(job.status)) {
+        throw new Error(`El servidor devolvió una etapa desconocida: ${job.status}.`);
+      }
+    } catch (err) {
+      if (generation !== pollGeneration) return;
+      connectionFailures++;
+      if (canRetry(err) && connectionFailures <= 3) {
+        setStatus(`Conexión interrumpida. Reintentando consulta (${connectionFailures}/3)…`, 0);
+        pollTimer = setTimeout(check, 1500 * connectionFailures);
+        return;
+      }
+      stop();
+      showFailure(`No se pudo consultar el progreso. ${err.message}`, canRetry(err)
+        ? () => poll(jobId, onDone, isMain, onRetry)
+        : null);
+      return;
+    }
+    if (generation !== pollGeneration) return;
+    connectionFailures = 0;
+    if (isMain) {
+      if (job.title) $("fileName").textContent = job.title;
+      if (job.audio_ready && !audioLoaded) {
+        audioLoaded = true;
+        player.src = "/api/jobs/" + encodeURIComponent(jobId) + "/audio";
+      }
+    }
+    if (job.status === "error") {
+      stop();
+      return showFailure(`No se pudo procesar la canción. ${job.error || "Ocurrió un error inesperado."}`, onRetry);
+    }
+    if (job.status === "done") {
+      stop();
+      if (!Array.isArray(job.result)) {
+        return showFailure("El servidor terminó el trabajo pero no devolvió una letra válida.");
+      }
+      try { return onDone(job); }
+      catch (err) { return showFailure(`No se pudo mostrar el resultado. ${err.message}`); }
+    }
+    const pct = " " + Math.round((job.progress || 0) * 100) + "%";
+    const labels = {
+      queued: "En cola…",
+      downloading: "Descargando audio de YouTube…" + pct,
+      separating: "Separando la voz (puede tardar varios minutos)…" + pct,
+      loading_model: "Cargando modelo (la primera vez descarga ~500 MB)…",
+      transcribing: "Transcribiendo…" + pct,
+      chords: "Detectando acordes…",
+    };
+    setStatus(labels[job.status] || "Procesando canción…", job.progress);
+    pollTimer = setTimeout(check, 1500);
+  };
+  pollTimer = setTimeout(check, 0);
+}
+
+function setStatus(msg, progress, isError = false) {
+  statusEl.textContent = msg;
+  statusEl.setAttribute("role", isError ? "alert" : "status");
+  statusEl.setAttribute("aria-live", isError ? "assertive" : "polite");
+  const pct = Math.round((progress || 0) * 100);
+  barFill.style.width = pct + "%";
+  $("bar").setAttribute("aria-valuenow", String(pct));
+  $("recovery").hidden = true;
+  recoveryAction = null;
+}
+
+function showFailure(message, retry) {
+  setStatus(message, 0, true);
+  if (!lines.length) lyricsEl.innerHTML = '<div class="empty">No se pudo procesar esta canción. Revisa el error y elige cómo continuar.</div>';
+  recoveryAction = typeof retry === "function" ? retry : null;
+  $("retryAction").hidden = !recoveryAction;
+  $("recovery").hidden = false;
+}
+
+$("retryAction").onclick = async () => {
+  if (!recoveryAction || busy) return;
+  const retry = recoveryAction;
+  $("retryAction").disabled = true;
+  try { await retry(); }
+  finally { $("retryAction").disabled = false; }
+};
+$("chooseAnother").onclick = () => {
+  $("recovery").hidden = true;
+  $("file").click();
+};
+
+function clearLyrics() {
+  lyricsEl.classList.remove("welcome-mode");
+  lines = []; lineEls = []; wordEls = []; activeIdx = -1;
+  lyricShift = 0; $("syVal").textContent = "0.0 s";
+  chords = []; songKey = ""; baseBpm = 0; baseBeats = []; shownBeats = [];
+  document.body.classList.remove("hasChords", "hasLyrics", "hasTempo");
+  lyricsEl.innerHTML = '<div class="empty">Generando letra…</div>';
+}
+
+/* ----------------------------------------------------------------- dibujado */
+function render() {
+  lyricsEl.innerHTML = "";
+  lineEls = []; wordEls = []; activeIdx = -1;
+  if (!lines.length) {
+    lyricsEl.innerHTML = '<div class="empty">No hay letra. ' +
+      (editMode ? "Usa “＋ Línea en el tiempo actual”." : "No se detectó letra en este audio.") + "</div>";
+    return;
+  }
+  lines.forEach((ln, i) => (editMode ? buildEditRow(ln, i) : buildLine(ln, i)));
+}
+
+// Nombre de acorde desplazado `semis` semitonos (ej. "Am" → "Cm" con +3).
+function shiftChord(name, semis) {
+  const m = /^([A-G]#?)(m?)$/.exec(name);
+  if (!m) return name;
+  const i = (((NOTES.indexOf(m[1]) + semis) % 12) + 12) % 12;
+  return NOTES[i] + m[2];
+}
+const shapeShift = () => transpose - capo;   // lo que se muestra son las formas que tocas con capo
+
+// Acorde vigente en el instante t (o el último que empezó antes).
+function chordAt(t) {
+  let cur = null;
+  for (const c of chords) { if (c.start <= t) cur = c; else break; }
+  return cur;
+}
+
+// Devuelve {índiceDePalabra: [segmentos de acorde]} para la línea i.
+function chordsForLine(i) {
+  const ln = lines[i], out = {};
+  if (!ln.words.length) return out;
+  const first = toAudio(ln.words[0].start), last = toAudio(ln.end);   // acordes están en tiempo de audio
+  const active = chordAt(first + 0.05);
+  if (active && first - active.end < 4) out[0] = [active];
+  for (const c of chords) {
+    if (c.start <= first + 0.05 || c.start >= last) continue;
+    let k = ln.words.findIndex((w) => toAudio(w.end) > c.start);
+    if (k < 0) continue;
+    const prev = (out[k] || []).slice(-1)[0];
+    if (prev && prev.chord === c.chord) continue;
+    (out[k] ||= []).push(c);
+  }
+  return out;
+}
+
+function buildLine(ln, i) {
+  const div = document.createElement("div");
+  div.className = "line";
+  const playLine = () => { player.currentTime = Math.max(toAudio(ln.start), 0); player.play(); };
+  div.onclick = playLine;
+  const play = document.createElement("button");
+  play.type = "button";
+  play.className = "sr-only line-play";
+  play.textContent = "Reproducir línea";
+  play.setAttribute("aria-label", `Reproducir desde ${fmt(ln.start)}: ${ln.text}`);
+  play.onclick = (e) => { e.stopPropagation(); playLine(); };
+  div.appendChild(play);
+  const showCh = chords.length && $("showCh").checked;
+  const map = showCh ? chordsForLine(i) : {};
+  const spans = ln.words.map((w, k) => {
+    const wrap = document.createElement("span");
+    wrap.className = "wrap";
+    const s = document.createElement("span");
+    s.className = "w";
+    s.textContent = w.word;
+    if (map[k]) {
+      const c = document.createElement("span");
+      c.className = "ch";
+      map[k].forEach((seg, q) => {
+        const cs = document.createElement("button");
+        cs.type = "button";
+        cs.className = "cs" + (isLow(seg) ? " low" : "");
+        cs.textContent = shiftChord(seg.chord, shapeShift());
+        cs.title = isLow(seg) ? "Acorde dudoso: clic para corregir" : "Clic para cambiar el acorde";
+        cs.setAttribute("aria-label", `${shiftChord(seg.chord, shapeShift())}${isLow(seg) ? ", acorde dudoso" : ""}. Editar acorde`);
+        cs.onclick = (e) => { e.stopPropagation(); openChordMenu(seg, cs); };
+        if (q) c.append(" ");
+        c.appendChild(cs);
+      });
+      wrap.appendChild(c);
+    }
+    wrap.appendChild(s);
+    div.append(wrap, document.createTextNode(" "));
+    return s;
+  });
+  lyricsEl.appendChild(div);
+  lineEls.push(div);
+  wordEls.push(spans);
+}
+
+function mkBtn(label, title, fn) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "ib"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.onclick = fn;
+  return b;
+}
+
+function buildEditRow(ln, i) {
+  const div = document.createElement("div");
+  div.className = "line edit";
+
+  const time = document.createElement("span");
+  time.className = "time"; time.textContent = fmt(ln.start);
+
+  const inp = document.createElement("input");
+  inp.type = "text"; inp.className = "txt"; inp.value = ln.text;
+  inp.setAttribute("aria-label", `Letra de la línea que empieza en ${fmt(ln.start)}`);
+  inp.onchange = () => setText(ln, inp.value);
+
+  div.append(
+    time, inp,
+    mkBtn("▶", "Reproducir desde aquí", () => { player.currentTime = Math.max(toAudio(ln.start), 0); player.play(); }),
+    mkBtn("⏱", "Mover TODA la línea para que empiece en el tiempo actual", () => shiftLine(ln, lyricNow())),
+    mkBtn("⏲", "Marcar que la línea TERMINA en el tiempo actual (ajusta la velocidad de sus palabras)", () => endLine(ln, lyricNow())),
+    mkBtn("＋", "Agregar una línea debajo", () => addLine(ln.end > ln.start ? ln.end : ln.start + 2)),
+    mkBtn("🗑", "Borrar línea", () => { lines = lines.filter((l) => l !== ln); render(); })
+  );
+  lyricsEl.appendChild(div);
+  lineEls.push(div);
+  wordEls.push([]);
+}
+
+/* ------------------------------------------------------------------ edición */
+// Compara palabras ignorando mayúsculas, acentos y signos.
+const norm = (w) => w.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^\p{L}\p{N}]/gu, "");
+
+// Reasigna tiempos tras cambiar el texto: las palabras que siguen iguales CONSERVAN su tiempo;
+// las nuevas se reparten solo en el hueco de las que reemplazan (no se estira hacia otras líneas).
+function retime(ln, text) {
+  const old = ln.words, toks = text.split(/\s+/).filter(Boolean);
+  const n = old.length, m = toks.length;
+  const same = (i, j) => { const a = norm(old[i].word); return a && a === norm(toks[j]); };
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = same(i, j) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const match = new Array(m).fill(-1);
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (same(i, j)) { match[j] = i; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+  const out = new Array(m);
+  for (let k = 0; k < m;) {
+    if (match[k] >= 0) {
+      const o = old[match[k]];
+      out[k] = { word: toks[k], start: o.start, end: o.end };
+      k++; continue;
+    }
+    let e = k; while (e < m && match[e] < 0) e++;            // tramo nuevo [k, e)
+    const gs = k > 0 ? out[k - 1].end : ln.start;
+    let ge = e < m ? old[match[e]].start : ln.end;
+    ge = Math.max(ge, gs + 0.3 * (e - k));
+    const step = (ge - gs) / (e - k);
+    for (let q = k; q < e; q++)
+      out[q] = { word: toks[q], start: r2(gs + (q - k) * step), end: r2(gs + (q - k + 1) * step) };
+    k = e;
+  }
+  ln.words = out;
+  ln.text = toks.join(" ");
+  ln.start = out[0].start;
+  ln.end = out[m - 1].end;
+}
+
+function setText(ln, text, forceRender) {
+  text = text.trim();
+  if (!text) { lines = lines.filter((l) => l !== ln); return render(); }
+  retime(ln, text);
+  lines.sort((a, b) => a.start - b.start);
+  if (forceRender) render();
+}
+
+// Mueve la línea completa (con todos sus tiempos) para que empiece en `to`.
+function shiftLine(ln, to) {
+  const d = to - ln.start;
+  ln.words.forEach((w) => { w.start = r2(w.start + d); w.end = r2(w.end + d); });
+  ln.start = r2(ln.start + d); ln.end = r2(ln.end + d);
+  lines.sort((a, b) => a.start - b.start);
+  render();
+}
+
+// Hace que la línea termine en `to`, escalando el tiempo de sus palabras proporcionalmente.
+function endLine(ln, to) {
+  if (to < ln.start + 0.3 || !ln.words.length) return;
+  const f = (to - ln.start) / Math.max(ln.end - ln.start, 0.1);
+  ln.words.forEach((w) => {
+    w.start = r2(ln.start + (w.start - ln.start) * f);
+    w.end = r2(ln.start + (w.end - ln.start) * f);
+  });
+  ln.end = r2(to);
+  render();
+}
+
+function addLine(at) {
+  const ln = { start: r2(at), end: r2(at + 2), text: "", words: [] };
+  lines.push(ln);
+  lines.sort((a, b) => a.start - b.start);
+  render();
+  const row = lineEls[lines.indexOf(ln)];
+  if (row) { row.scrollIntoView({ block: "center" }); row.querySelector("input").focus(); }
+}
+
+function setEdit(on) {
+  editMode = on;
+  if (!on) lines = lines.filter((l) => l.text && l.words.length);  // quita líneas vacías
+  document.body.classList.toggle("editing", on);
+  $("editBtn").classList.toggle("on", on);
+  $("editBtn").setAttribute("aria-pressed", String(on));
+  $("editBtn").textContent = on ? "✔ Terminar" : "✏️ Editar";
+  render();
+}
+
+$("editBtn").onclick = () => setEdit(!editMode);
+$("addBtn").onclick = () => addLine(lyricNow());
+
+$("copyBtn").onclick = async () => {
+  const text = lines.map((l) => l.text).join("\n");
+  try { await navigator.clipboard.writeText(text); setStatus("Letra copiada ✔", 1); }
+  catch { setStatus("No se pudo copiar. Selecciona el texto manualmente.", 0); }
+};
+
+async function startRetranscribe(parentJobId, t) {
+  const form = new FormData();
+  form.append("start", String(t));
+  busy = true;
+  try {
+    setStatus("Enviando solicitud para re-transcribir…", 0);
+    const id = await postJob("/api/jobs/" + encodeURIComponent(parentJobId) + "/retranscribe", form);
+    poll(id, (job) => {
+      const cut = t + lyricShift - 0.01;
+      const fresh = job.result.map((l) => ({
+        ...l, start: r2(l.start + lyricShift), end: r2(l.end + lyricShift),
+        words: l.words.map((w) => ({ ...w, start: r2(w.start + lyricShift), end: r2(w.end + lyricShift) })),
+      }));
+      lines = lines.filter((l) => l.start < cut).concat(fresh);
+      setStatus(`Tramo desde ${fmt(t)} re-transcrito ✔`, 1);
+      render();
+    }, false, () => startRetranscribe(parentJobId, t));
+  } catch (err) {
+    busy = false;
+    showFailure(`No se pudo volver a transcribir el tramo. ${err.message}`, canRetry(err)
+      ? () => startRetranscribe(parentJobId, t)
+      : null);
+  }
+}
+
+// Vuelve a transcribir desde el tiempo actual hasta el final, sin filtro de silencios.
+$("retryBtn").onclick = () => {
+  if (!currentJobId || busy) return;
+  const parentJobId = currentJobId;
+  const t = r2(player.currentTime);
+  if (!confirm(`Se volverá a transcribir desde ${fmt(t)} hasta el final y se reemplazará ` +
+               `la letra de ese tramo (tus ediciones ahí se perderán). ¿Continuar?`)) return;
+  player.pause();
+  startRetranscribe(parentJobId, t);
+};
+
+/* ------------------------------------------------------------------- acordes */
+const capoSel = $("capo");
+for (let n = 0; n <= 9; n++) {
+  const o = document.createElement("option");
+  o.value = n; o.textContent = n === 0 ? "sin capo" : "traste " + n;
+  capoSel.appendChild(o);
+}
+
+function updateChordBar() {
+  $("keyTxt").textContent = songKey ? shiftChord(songKey, transpose) : "–";
+  $("trVal").textContent = (transpose > 0 ? "+" : "") + transpose;
+  capoSel.value = String(capo);
+  $("shapeTxt").textContent = songKey && capo
+    ? "Tocas formas en " + shiftChord(songKey, transpose - capo) + " con capo en el traste " + capo
+    : "";
+  document.body.classList.toggle("showCh", $("showCh").checked);
+}
+function chordsChanged() { updateChordBar(); render(); }
+$("trUp").onclick = () => { transpose = Math.min(transpose + 1, 11); chordsChanged(); };
+$("trDown").onclick = () => { transpose = Math.max(transpose - 1, -11); chordsChanged(); };
+capoSel.onchange = () => { capo = +capoSel.value; chordsChanged(); };
+$("showCh").onchange = chordsChanged;
+
+/* ---------------------------------------- corregir acordes con un clic */
+const LOW = 0.3;                                    // confianza mínima para no marcar el acorde como dudoso
+const isLow = (seg) => !seg.fixed && (seg.conf ?? 1) < LOW;
+const ALL = [...NOTES, ...NOTES.map((n) => n + "m")];
+let menuSeg = null;
+const menuEl = $("chordMenu");
+let menuAnchor = null;
+
+function closeMenu(restoreFocus = false) {
+  menuEl.classList.remove("on");
+  menuSeg = null;
+  if (restoreFocus && menuAnchor && menuAnchor.isConnected) menuAnchor.focus();
+  menuAnchor = null;
+}
+
+function openChordMenu(seg, anchor) {
+  menuSeg = seg;
+  menuAnchor = anchor;
+  const shown = shiftChord(seg.chord, shapeShift());
+  $("cmTitle").textContent = "Acorde: " + shown + (isLow(seg) ? " (dudoso)" : "");
+  const alts = $("cmAlts");
+  alts.innerHTML = "";
+  (seg.alts || []).slice(0, 3).forEach((a) =>
+    alts.appendChild(mkBtn(shiftChord(a, shapeShift()), "Cambiar a este acorde", () => applyChord(a))));
+  const sel = $("cmSel");
+  sel.innerHTML = '<option value="">Otro acorde…</option>' +
+    ALL.map((a) => `<option value="${a}">${shiftChord(a, shapeShift())}</option>`).join("") +
+    '<option value="N">(quitar este acorde)</option>';
+  sel.onchange = () => { if (sel.value) applyChord(sel.value); };
+  $("cmAll").checked = false;
+  $("cmAllTxt").textContent = "Cambiar todos los " + shown + " de la canción";
+  const r = anchor.getBoundingClientRect();
+  menuEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 260)) + "px";
+  menuEl.style.top = Math.min(r.bottom + 6, window.innerHeight - 220) + "px";
+  menuEl.classList.add("on");
+  $("cmSel").focus();
+}
+
+function applyChord(newChord) {
+  if (!menuSeg) return;
+  const targets = $("cmAll").checked ? chords.filter((c) => c.chord === menuSeg.chord) : [menuSeg];
+  if (newChord === "N") chords = chords.filter((c) => !targets.includes(c));
+  else targets.forEach((c) => setChord(c, newChord));
+  closeMenu();
+  render();
+}
+
+function setChord(seg, name) {
+  seg.alts = [seg.chord, ...(seg.alts || []).filter((a) => a !== name && a !== seg.chord)].slice(0, 3);
+  seg.chord = name; seg.conf = 1; seg.fixed = true;
+}
+
+$("cmClose").onclick = () => closeMenu(true);
+menuEl.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.preventDefault(); closeMenu(true); }
+});
+document.addEventListener("click", (e) => { if (!menuEl.contains(e.target)) closeMenu(); });
+
+/* ----------------------------------------- medir acierto con acordes reales */
+const QUAL_RE = /^(?:m(?!aj)|min|maj|M|dim|aug|sus[24]?|add\d+|\d+|[b#]\d+|[+°ø-]|\(.*?\))*$/;
+
+// "Bbm7" -> "A#m", "C/G" -> "C", "Cmaj7" -> "C". Devuelve null si no parece un acorde.
+function parseChord(tok) {
+  tok = tok.replace(/[()\[\]]/g, "").split("/")[0];
+  const m = /^([A-G])([#b♯♭]?)(.*)$/.exec(tok);
+  if (!m || !QUAL_RE.test(m[3])) return null;
+  let i = NOTES.indexOf(m[1]);
+  if (m[2] === "#" || m[2] === "♯") i++; else if (m[2]) i--;
+  const minor = /^(m(?!aj)|min|dim|-)/.test(m[3]);
+  return NOTES[(i + 12) % 12] + (minor ? "m" : "");
+}
+
+function detectedGroups() {              // acordes detectados, juntando los repetidos seguidos
+  const groups = [];
+  for (const c of chords) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === c.chord) last.segs.push(c); else groups.push({ name: c.chord, segs: [c] });
+  }
+  return groups;
+}
+
+// Alinea la secuencia real completa con un tramo de la detectada (puede sobrar al inicio o al final).
+const SUB = 1.01;   // sustituir cuesta un poco más que 1: en empates se prefieren más coincidencias
+function alignSeq(det, tru) {
+  const n = det.length, m = tru.length;
+  const D = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let j = 1; j <= m; j++) D[0][j] = j;
+  for (let i = 1; i <= n; i++)
+    for (let j = 1; j <= m; j++)
+      D[i][j] = Math.min(D[i - 1][j - 1] + (det[i - 1] === tru[j - 1] ? 0 : SUB), D[i - 1][j] + 1, D[i][j - 1] + 1);
+  let bi = 0, best = Infinity;
+  for (let i = 0; i <= n; i++) if (D[i][m] < best) { best = D[i][m]; bi = i; }
+  const ops = [];
+  let i = bi, j = m;
+  while (j > 0) {
+    if (i > 0 && Math.abs(D[i][j] - (D[i - 1][j - 1] + (det[i - 1] === tru[j - 1] ? 0 : SUB))) < 1e-9) {
+      ops.push({ det: i - 1, tru: j - 1, ok: det[i - 1] === tru[j - 1] }); i--; j--;
+    } else if (i > 0 && Math.abs(D[i][j] - (D[i - 1][j] + 1)) < 1e-9) { ops.push({ det: i - 1, tru: -1 }); i--; }
+    else { ops.push({ det: -1, tru: j - 1 }); j--; }
+  }
+  return ops.reverse();
+}
+
+let lastMeasure = null;
+$("measureBtn").onclick = () => { $("measureDlg").showModal(); };
+$("measureClose").onclick = () => $("measureDlg").close();
+
+$("measureGo").onclick = () => {
+  const tru = $("measureTxt").value.split(/[\s|,;]+/).map(parseChord).filter(Boolean);
+  const groups = detectedGroups();
+  const out = $("measureOut");
+  lastMeasure = null; $("measureFix").disabled = true;
+  if (tru.length < 2) { out.textContent = "Pega al menos 2 acordes reales (por ejemplo: Am F C G)."; return; }
+  if (!groups.length) { out.textContent = "No hay acordes detectados en esta canción."; return; }
+  const ops = alignSeq(groups.map((g) => g.name), tru);
+  const good = ops.filter((o) => o.ok).length;
+  const subs = ops.filter((o) => o.det >= 0 && o.tru >= 0 && !o.ok);
+  const missing = ops.filter((o) => o.det < 0).length;     // la detección no tiene un acorde real
+  const extra = ops.filter((o) => o.tru < 0).length;       // la detección inventó un acorde
+  const pct = Math.round((100 * good) / tru.length);
+  let html = `<div class="big">${pct}% de acierto</div>${good} de ${tru.length} acordes reales coinciden · ` +
+    `${subs.length} distintos · ${missing} no detectados · ${extra} de más`;
+  if (subs.length) {
+    html += "<table><tr><th>Real</th><th>Detectado</th></tr>" +
+      subs.slice(0, 12).map((o) => `<tr><td>${tru[o.tru]}</td><td>${groups[o.det].name}</td></tr>`).join("") +
+      "</table>" + (subs.length > 12 ? `<div class="hint">…y ${subs.length - 12} más</div>` : "");
+  }
+  out.innerHTML = html;
+  lastMeasure = { ops, groups, tru };
+  $("measureFix").disabled = !subs.length;
+};
+
+$("measureFix").onclick = () => {
+  if (!lastMeasure) return;
+  let n = 0;
+  for (const o of lastMeasure.ops) {
+    if (o.det >= 0 && o.tru >= 0 && !o.ok) {
+      lastMeasure.groups[o.det].segs.forEach((sg) => setChord(sg, lastMeasure.tru[o.tru]));
+      n++;
+    }
+  }
+  $("measureDlg").close();
+  setStatus(`Se corrigieron ${n} acordes con los reales que pegaste ✔`, 1);
+  render();
+};
+
+/* ------------------------------------------------ copiar hoja de acordes */
+$("sheetBtn").onclick = async () => {
+  const out = [];
+  lines.forEach((ln, i) => {
+    const map = chordsForLine(i);
+    let chordLine = "", textLine = "";
+    ln.words.forEach((w, k) => {
+      if (map[k]) {
+        const label = map[k].map((sg) => shiftChord(sg.chord, shapeShift())).join(" ");
+        while (chordLine.length < textLine.length) chordLine += " ";
+        if (chordLine && !chordLine.endsWith(" ")) chordLine += " ";
+        chordLine += label;
+      }
+      textLine += w.word + " ";
+    });
+    if (chordLine.trim()) out.push(chordLine.trimEnd());
+    out.push(textLine.trimEnd());
+  });
+  try { await navigator.clipboard.writeText(out.join("\n")); setStatus("Hoja de acordes copiada ✔ (pégala en un editor con letra monoespaciada)", 1); }
+  catch { setStatus("No se pudo copiar al portapapeles.", 0); }
+};
+
+
+/* ------------------------------------------- letra real: medir y corregir */
+const lev = (a, b) => {
+  const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+};
+function wordScore(a, b) {          // 1 = igual, parcial si se parecen mucho
+  if (!a || !b) return -1;
+  if (a === b) return 1;
+  const sim = 1 - lev(a, b) / Math.max(a.length, b.length);
+  return sim >= 0.6 ? sim * 0.8 : -1;
+}
+// Alinea la letra real con las palabras detectadas. Devuelve {match[j]=i|-1, exact, near}.
+function alignLyrics(det, real) {
+  const n = det.length, m = real.length, GAP = -0.4;
+  const dn = det.map((w) => norm(w.word)), rn = real.map((t) => norm(t.w));
+  const W = m + 1, sc = new Float32Array((n + 1) * W), bt = new Uint8Array((n + 1) * W);
+  for (let i = 1; i <= n; i++) { sc[i * W] = i * GAP; bt[i * W] = 1; }
+  for (let j = 1; j <= m; j++) { sc[j] = j * GAP; bt[j] = 2; }
+  for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) {
+    const s = wordScore(dn[i - 1], rn[j - 1]);
+    let best = sc[(i - 1) * W + j] + GAP, b = 1;             // 1: palabra detectada sobra
+    const l = sc[i * W + j - 1] + GAP; if (l > best) { best = l; b = 2; }   // 2: falta en lo detectado
+    if (s > 0) { const d = sc[(i - 1) * W + j - 1] + s; if (d >= best) { best = d; b = 3; } }
+    sc[i * W + j] = best; bt[i * W + j] = b;
+  }
+  const match = new Array(m).fill(-1);
+  let i = n, j = m, exact = 0, near = 0;
+  while (i > 0 || j > 0) {
+    const b = bt[i * W + j];
+    if (b === 3) { match[j - 1] = i - 1; wordScore(dn[i - 1], rn[j - 1]) === 1 ? exact++ : near++; i--; j--; }
+    else if (b === 1) i--;
+    else j--;
+  }
+  return { match, exact, near };
+}
+function realTokens(text) {
+  const toks = [];
+  text.split(/\r?\n/).forEach((ln, li) => ln.trim().split(/\s+/).filter(Boolean).forEach((w) => toks.push({ w, li })));
+  return toks;
+}
+let lastLyrics = null;
+$("realBtn").onclick = () => { $("lyricsOut").innerHTML = ""; $("lyricsFix").disabled = true; $("lyricsDlg").showModal(); };
+$("lyricsClose").onclick = () => $("lyricsDlg").close();
+$("lyricsGo").onclick = () => {
+  const real = realTokens($("lyricsTxt").value);
+  const det = lines.flatMap((l) => l.words);
+  if (real.length < 3 || !det.length) { $("lyricsOut").textContent = "Pega la letra real (al menos unas palabras) y asegúrate de tener letra generada."; return; }
+  const a = alignLyrics(det, real);
+  const pct = Math.round((100 * a.exact) / real.length), pctNear = Math.round((100 * (a.exact + a.near)) / real.length);
+  lastLyrics = { real, det, a };
+  $("lyricsOut").innerHTML = `<div class="big">${pct}% de palabras exactas</div>` +
+    `<div>${a.exact} de ${real.length} palabras de la letra real salieron exactas` +
+    (a.near ? `, ${a.near} casi (error de una letra o acento) → ${pctNear}% contando las casi` : "") +
+    `. La app transcribió ${det.length} palabras.</div>`;
+  $("lyricsFix").disabled = false;
+};
+$("lyricsFix").onclick = () => {
+  if (!lastLyrics) return;
+  const { real, det, a } = lastLyrics, T = new Array(real.length);
+  real.forEach((t, j) => { if (a.match[j] >= 0) T[j] = { start: det[a.match[j]].start, end: det[a.match[j]].end }; });
+  for (let j = 0; j < real.length;) {                          // tramos sin tiempo: se reparten en el hueco
+    if (T[j]) { j++; continue; }
+    let e = j; while (e < real.length && !T[e]) e++;
+    const cnt = e - j;
+    let gs = j > 0 ? T[j - 1].end : null, ge = e < real.length ? T[e].start : null;
+    if (gs == null) gs = ge == null ? 0 : Math.max(0, ge - 0.4 * cnt);
+    if (ge == null) ge = gs + 0.4 * cnt;
+    ge = Math.max(ge, gs + 0.2 * cnt);
+    const step = (ge - gs) / cnt;
+    for (let q = j; q < e; q++) T[q] = { start: r2(gs + (q - j) * step), end: r2(gs + (q - j + 1) * step) };
+    j = e;
+  }
+  const byLine = new Map();
+  real.forEach((t, j) => { if (!byLine.has(t.li)) byLine.set(t.li, []); byLine.get(t.li).push({ word: t.w, start: T[j].start, end: T[j].end }); });
+  lines = [...byLine.values()].map((words) => ({
+    start: words[0].start, end: words[words.length - 1].end, text: words.map((w) => w.word).join(" "), words,
+  }));
+  lines.sort((x, y) => x.start - y.start);
+  $("lyricsDlg").close();
+  setStatus("Letra corregida con la letra real ✔ (los tiempos de las palabras que coinciden se conservaron)", 1);
+  render();
+};
+
+/* ------------------------------------------- descargar como imagen / PDF */
+const SH = { W: 1240, H: 1754, M: 110, LYR: 34, CH: 30, LH: 46, CHH: 40, GAP: 26 };
+
+function sheetRows(ctx) {
+  const rows = [], maxW = SH.W - 2 * SH.M, showCh = chords.length && $("showCh").checked;
+  lines.forEach((ln, i) => {
+    const map = showCh ? chordsForLine(i) : {};
+    let row = [], x = 0;
+    ln.words.forEach((w, k) => {
+      const label = map[k] ? map[k].map((sg) => shiftChord(sg.chord, shapeShift())).join(" ") : "";
+      ctx.font = `${SH.LYR}px Arial, Helvetica, sans-serif`;
+      const ww = ctx.measureText(w.word + " ").width;
+      ctx.font = `bold ${SH.CH}px Arial, Helvetica, sans-serif`;
+      const cw = label ? ctx.measureText(label + "  ").width : 0;
+      const wd = Math.max(ww, cw);
+      if (x + wd > maxW && row.length) { rows.push({ items: row }); row = []; x = 0; }
+      row.push({ w: w.word, c: label, x });
+      x += wd;
+    });
+    if (row.length) rows.push({ items: row, end: true });
+  });
+  const hasCh = (r) => r.items.some((it) => it.c);
+  rows.forEach((r) => { r.h = (showCh && hasCh(r) ? SH.CHH : 0) + SH.LH + (r.end ? SH.GAP : 0); r.hasCh = hasCh(r); });
+  return rows;
+}
+
+function sheetHeader() {
+  const t = $("fileName").textContent.replace(/\.[^.]+$/, "") || "Canción";
+  const sub = [];
+  if (chords.length && $("showCh").checked) {
+    if (songKey) sub.push("Tono: " + shiftChord(songKey, transpose));
+    if (capo) sub.push("Capo en traste " + capo);
+    else if (transpose) sub.push("Transpuesto " + (transpose > 0 ? "+" : "") + transpose);
+  }
+  const bpm = $("bpmTxt").textContent;
+  if (/^\d/.test(bpm)) sub.push(bpm + " BPM");
+  return { title: t, sub: sub.join("  ·  ") };
+}
+
+// Dibuja un conjunto de filas en un canvas. `head` = encabezado (solo en la primera página).
+function paintSheet(cv, rows, head) {
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.textBaseline = "alphabetic";
+  let y = SH.M;
+  if (head) {
+    ctx.fillStyle = "#111"; ctx.font = "bold 52px Arial, Helvetica, sans-serif";
+    ctx.fillText(head.title, SH.M, y + 40); y += 62;
+    if (head.sub) { ctx.fillStyle = "#555"; ctx.font = "28px Arial, Helvetica, sans-serif"; ctx.fillText(head.sub, SH.M, y + 20); y += 36; }
+    ctx.strokeStyle = "#ccc"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(SH.M, y + 6); ctx.lineTo(cv.width - SH.M, y + 6); ctx.stroke();
+    y += 44;
+  }
+  rows.forEach((r) => {
+    if (r.hasCh) {
+      ctx.fillStyle = "#b45309"; ctx.font = `bold ${SH.CH}px Arial, Helvetica, sans-serif`;
+      r.items.forEach((it) => { if (it.c) ctx.fillText(it.c, SH.M + it.x, y + SH.CH); });
+      y += SH.CHH;
+    }
+    ctx.fillStyle = "#111"; ctx.font = `${SH.LYR}px Arial, Helvetica, sans-serif`;
+    r.items.forEach((it) => ctx.fillText(it.w, SH.M + it.x, y + SH.LYR));
+    y += SH.LH + (r.end ? SH.GAP : 0);
+  });
+  ctx.fillStyle = "#9a9a9a"; ctx.font = "22px Arial, Helvetica, sans-serif";
+  ctx.fillText("Hecho con Musiconvert", SH.M, cv.height - 48);
+  return y;
+}
+
+function headHeight(head) { return 62 + (head.sub ? 36 : 0) + 44; }
+
+function sheetPages() {
+  const probe = document.createElement("canvas").getContext("2d");
+  const rows = sheetRows(probe), head = sheetHeader();
+  const pages = []; let cur = [], used = SH.M + headHeight(head);
+  rows.forEach((r) => {
+    if (used + r.h > SH.H - SH.M && cur.length) { pages.push(cur); cur = []; used = SH.M; }
+    cur.push(r); used += r.h;
+  });
+  pages.push(cur);
+  return { pages, head, rows };
+}
+
+function saveBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const safeName = () => ($("fileName").textContent.replace(/\.[^.]+$/, "") || "cancion").replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]+/g, "").trim().slice(0, 60) || "cancion";
+
+function downloadPng() {
+  if (!lines.length) return setStatus("Primero genera la letra.", 0);
+  const { rows, head } = sheetPages();
+  const total = SH.M * 2 + headHeight(head) + rows.reduce((s, r) => s + r.h, 0);
+  const cv = document.createElement("canvas");
+  cv.width = SH.W; cv.height = Math.max(total, 600);
+  paintSheet(cv, rows, head);
+  cv.toBlob((b) => { saveBlob(b, safeName() + ".png"); setStatus("Imagen descargada ✔", 1); }, "image/png");
+}
+
+// PDF mínimo hecho a mano: una imagen JPEG por página A4 (sin librerías externas).
+function buildPdf(jpegs) {
+  const enc = new TextEncoder(), parts = [], offs = []; let pos = 0;
+  const put = (x) => { const u = typeof x === "string" ? enc.encode(x) : x; parts.push(u); pos += u.length; };
+  const obj = (n, body) => { offs[n] = pos; put(`${n} 0 obj\n`); put(body); put("\nendobj\n"); };
+  put("%PDF-1.4\n");
+  const n = jpegs.length, kids = jpegs.map((_, i) => `${3 + i * 3} 0 R`).join(" ");
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${n} >>`);
+  jpegs.forEach((j, i) => {
+    const p = 3 + i * 3, c = p + 1, im = p + 2, content = "q 595 0 0 842 0 0 cm /Im0 Do Q";
+    obj(p, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${c} 0 R >>`);
+    obj(c, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    offs[im] = pos;
+    put(`${im} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${SH.W} /Height ${SH.H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${j.length} >>\nstream\n`);
+    put(j); put("\nendstream\nendobj\n");
+  });
+  const total = 3 + n * 3, xref = pos;
+  put(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let k = 1; k < total; k++) put(String(offs[k]).padStart(10, "0") + " 00000 n \n");
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+async function downloadPdf() {
+  if (!lines.length) return setStatus("Primero genera la letra.", 0);
+  const { pages, head } = sheetPages(), jpegs = [];
+  for (let i = 0; i < pages.length; i++) {
+    const cv = document.createElement("canvas"); cv.width = SH.W; cv.height = SH.H;
+    paintSheet(cv, pages[i], i === 0 ? head : null);
+    const b = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.92));
+    jpegs.push(new Uint8Array(await b.arrayBuffer()));
+  }
+  saveBlob(buildPdf(jpegs), safeName() + ".pdf");
+  setStatus(`PDF descargado ✔ (${pages.length} página${pages.length > 1 ? "s" : ""})`, 1);
+}
+$("pngBtn").onclick = downloadPng;
+$("pdfBtn").onclick = () => downloadPdf().catch((e) => setStatus("No se pudo crear el PDF: " + e.message, 0));
+
+/* --------------------------------------------------------------- tempo y pulso */
+let actx = null;
+function click(strong) {
+  if (!actx) return;
+  const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+  o.frequency.value = strong ? 1700 : 1000;
+  g.gain.setValueAtTime(0.25, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  o.connect(g); g.connect(actx.destination);
+  o.start(now); o.stop(now + 0.07);
+}
+
+// Pulsos que se muestran según el modo (÷2, normal, ×2).
+function computeShown() {
+  if (beatMode === 2) {
+    shownBeats = [];
+    baseBeats.forEach((b, i) => {
+      shownBeats.push(b);
+      if (i + 1 < baseBeats.length) shownBeats.push((b + baseBeats[i + 1]) / 2);
+    });
+  } else if (beatMode === 0.5) {
+    shownBeats = baseBeats.filter((_, i) => i % 2 === baseDown % 2);
+  } else shownBeats = baseBeats;
+}
+
+function updateTempo(resetPhase) {
+  computeShown();
+  if (resetPhase) {
+    beatPhase = beatMode === 2 ? (2 * baseDown) % 4 : beatMode === 0.5 ? Math.floor(baseDown / 2) % 4 : baseDown % 4;
+  }
+  $("bpmTxt").textContent = baseBpm ? (baseBpm * beatMode).toFixed(1) : "–";
+  lastBeat = -1;
+}
+$("bpmHalf").onclick = () => { beatMode = beatMode === 2 ? 1 : 0.5; updateTempo(true); };
+$("bpmDouble").onclick = () => { beatMode = beatMode === 0.5 ? 1 : 2; updateTempo(true); };
+
+// ---- Tempo manual: toda la cuadrícula de pulsos se puede reconstruir a mano ----
+const NB = (x) => Math.round(x * 1000) / 1000;
+function nearestIdx(t) {                       // pulso mostrado más cercano a t
+  if (!shownBeats.length) return -1;
+  let i = beatIndex(t);
+  if (i < 0) return 0;
+  if (i + 1 < shownBeats.length && shownBeats[i + 1] - t < t - shownBeats[i]) i++;
+  return i;
+}
+function audioEnd() {
+  return player.duration && isFinite(player.duration) ? player.duration : (lines.length ? lines[lines.length - 1].end + 5 : 300);
+}
+// Cuadrícula regular con periodo Ta (seg) que pasa por el instante `anchor`.
+function gridFrom(Ta, anchor) {
+  const end = audioEnd(), first = anchor - Math.floor(anchor / Ta) * Ta, arr = [];
+  for (let i = 0; first + i * Ta < end; i++) arr.push(NB(first + i * Ta));
+  baseBeats = arr; baseBpm = 60 / Ta; beatMode = 1; baseDown = 0;
+  document.body.classList.add("hasTempo");
+}
+function adoptShown() {                        // lo que se ve (÷2/×2) pasa a ser la cuadrícula base
+  baseBeats = shownBeats.slice(); baseBpm = baseBpm * beatMode; beatMode = 1; baseDown = beatPhase;
+  computeShown();
+}
+function nudgeBpm(d) {
+  if (!shownBeats.length) return;
+  const bpm = baseBpm * beatMode + d;
+  if (bpm < 30 || bpm > 300) return;
+  const i = nearestIdx(player.currentTime), anchor = shownBeats[i];
+  const dot = (((i - beatPhase) % 4) + 4) % 4;
+  gridFrom(60 / bpm, anchor);                  // el pulso donde estás escuchando NO se mueve
+  let k = 0;
+  baseBeats.forEach((x, j) => { if (Math.abs(x - anchor) < Math.abs(baseBeats[k] - anchor)) k = j; });
+  beatPhase = (((k - dot) % 4) + 4) % 4; baseDown = beatPhase;
+  updateTempo(false);
+}
+function shiftBeats(dt) {
+  if (!shownBeats.length) return;
+  adoptShown();
+  baseBeats = baseBeats.map((b) => NB(b + dt));
+  updateTempo(false);
+}
+function setDownHere() {                       // el pulso más cercano a donde estás pasa a ser el "1"
+  if (!shownBeats.length) { $("tapInfo").textContent = "Primero toca el ritmo."; return; }
+  beatPhase = nearestIdx(player.currentTime) % 4;
+  lastBeat = -1;
+}
+$("bpmMinus").onclick = () => nudgeBpm(-0.5);
+$("bpmPlus").onclick = () => nudgeBpm(0.5);
+$("beatBack").onclick = () => shiftBeats(-0.03);
+$("beatFwd").onclick = () => shiftBeats(0.03);
+$("downBtn").onclick = setDownHere;
+
+// Tocar el ritmo: tantos toques como quieras (mín. 4); ajusta recta por mínimos cuadrados.
+let taps = [];
+function tapTempo() {
+  const w = performance.now() / 1000, playing = !player.paused, t = player.currentTime;
+  if (taps.length && w - taps[taps.length - 1].w > 3) taps = [];      // pausa larga = empezar de nuevo
+  taps.push({ w, t });
+  const n = taps.length, info = $("tapInfo");
+  if (n < 4) { info.textContent = `${n} toque${n > 1 ? "s" : ""}… sigue (mínimo 4)`; return; }
+  const ts = taps.map((x) => (playing ? x.t : x.w));                 // tiempo de audio si suena; si no, reloj
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const mi = (n - 1) / 2, mt = mean(ts);
+  let num = 0, den = 0;
+  ts.forEach((x, i) => { num += (i - mi) * (x - mt); den += (i - mi) ** 2; });
+  const Ta = num / den;
+  if (!(Ta > 0.2 && Ta < 3)) { info.textContent = "Toca más parejo (entre 20 y 300 BPM)."; return; }
+  let anchor = t;
+  if (playing) {
+    const ph = taps.map((x, i) => x.t - i * Ta).sort((a, b) => a - b);
+    anchor = ph[Math.floor(ph.length / 2)];                           // mediana: ignora toques torpes
+  }
+  gridFrom(Ta, anchor);
+  let k = 0; const ref = playing ? taps[0].t : t;
+  baseBeats.forEach((x, j) => { if (Math.abs(x - ref) < Math.abs(baseBeats[k] - ref)) k = j; });
+  beatPhase = k % 4; baseDown = beatPhase;                            // el primer toque cuenta como "1"
+  updateTempo(false);
+  info.textContent = `${n} toques → ${(60 / Ta).toFixed(1)} BPM. Si el 1 no coincide, usa «① El 1 está aquí».`;
+}
+$("tapBtn").onclick = tapTempo;
+$("clickOpt").onchange = (e) => {
+  if (e.target.checked && !actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+};
+document.addEventListener("keydown", (e) => {
+  const tag = document.activeElement ? document.activeElement.tagName : "";
+  if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+  if (e.key === "t" || e.key === "T") tapTempo();
+  else if (e.key === "1") setDownHere();
+  else if (e.key === " " && tag !== "BUTTON") { e.preventDefault(); playBtn.click(); }
+  else if (e.key === "Escape" && document.body.classList.contains("stage")) setStage(false);
+});
+
+const dotEls = [...document.querySelectorAll("#dots i")];
+function beatIndex(t) {              // último pulso que ya sonó (búsqueda binaria)
+  let lo = 0, hi = shownBeats.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (shownBeats[mid] <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans;
+}
+function beatTick() {
+  if (!shownBeats.length || !document.body.classList.contains("hasTempo")) return;
+  const idx = beatIndex(player.currentTime);
+  if (idx === lastBeat) return;
+  const forward = idx === lastBeat + 1;
+  lastBeat = idx;
+  const dot = idx < 0 ? -1 : (((idx - beatPhase) % 4) + 4) % 4;
+  dotEls.forEach((d, k) => d.classList.toggle("on", k === dot));
+  if (forward && !player.paused && $("clickOpt").checked) click(dot === 0);
+}
+
+/* ----------------------------------------------- interfaz: pestañas, opciones, reproductor */
+document.querySelectorAll(".tab").forEach((b) => {
+  b.onclick = () => {
+    const on = document.body.dataset.tab === b.dataset.tab;
+    document.body.dataset.tab = on ? "" : b.dataset.tab;
+    document.querySelectorAll(".tab").forEach((x) => {
+      const selected = x.dataset.tab === document.body.dataset.tab;
+      x.classList.toggle("on", selected);
+      x.setAttribute("aria-expanded", String(selected));
+    });
+  };
+});
+$("optBtn").onclick = () => {
+  const open = document.body.classList.toggle("opts");
+  $("optBtn").classList.toggle("on", open);
+  $("optBtn").setAttribute("aria-expanded", String(open));
+};
+let fs = 1;
+const setFs = (v) => { fs = Math.max(0.7, Math.min(1.8, v)); document.documentElement.style.setProperty("--fs", fs); };
+$("fsUp").onclick = () => setFs(fs + 0.1);
+$("fsDown").onclick = () => setFs(fs - 0.1);
+function setStage(on) {
+  document.body.classList.toggle("stage", on);
+  $("stageBtn").setAttribute("aria-pressed", String(on));
+  $("stageBtn").setAttribute("aria-label", on ? "Salir del modo escenario" : "Activar modo escenario a pantalla completa");
+  try {
+    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    else if (!on && document.fullscreenElement) document.exitFullscreen();
+  } catch (e) { /* sin pantalla completa: igual funciona el modo escenario */ }
+}
+$("stageBtn").onclick = () => setStage(true);
+$("exitStage").onclick = () => setStage(false);
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) setStage(false);
+});
+
+const playBtn = $("playBtn"), seek = $("seek");
+let seeking = false;
+playBtn.onclick = () => {
+  if (!player.getAttribute("src") && !player.currentSrc) return;
+  if (player.paused) player.play().catch((err) => {
+    const message = err.name === "NotAllowedError"
+      ? "El navegador bloqueó la reproducción. Pulsa reproducir otra vez para permitir el audio."
+      : `No se pudo iniciar la reproducción. ${err.message}`;
+    setStatus(message, 0, err.name !== "NotAllowedError");
+  });
+  else player.pause();
+};
+player.addEventListener("error", () => {
+  if (!player.getAttribute("src") && !player.currentSrc) return;
+  const code = player.error && player.error.code;
+  if (!code || code === 1) return;
+  const messages = {
+    2: "No se pudo cargar el audio por un problema de conexión.",
+    3: "El audio no se pudo decodificar; puede estar dañado.",
+    4: "El navegador no admite este formato de audio.",
+  };
+  showFailure(messages[code] || "No se pudo cargar o reproducir el audio. Prueba con otro archivo.", null);
+});
+["play", "pause", "ended"].forEach((ev) => player.addEventListener(ev, () => {
+  const playing = !player.paused;
+  playBtn.textContent = playing ? "⏸" : "▶";
+  playBtn.setAttribute("aria-label", playing ? "Pausar" : "Reproducir");
+  playBtn.setAttribute("aria-pressed", String(playing));
+}));
+seek.addEventListener("input", () => {
+  seeking = true;
+  if (isFinite(player.duration)) player.currentTime = (seek.value / 1000) * player.duration;
+});
+seek.addEventListener("change", () => { seeking = false; });
+$("speed").onchange = (e) => { player.playbackRate = +e.target.value; };
+(function dockLoop() {
+  const d = player.duration, ok = isFinite(d) && d > 0;
+  $("tCur").textContent = fmt(player.currentTime || 0);
+  $("tDur").textContent = ok ? fmt(d) : "0:00";
+  if (!seeking && ok) seek.value = Math.round((player.currentTime / d) * 1000);
+  requestAnimationFrame(dockLoop);
+})();
+
+/* ------------------------------------------------------- sincronía de la letra */
+function syncChanged() {
+  $("syVal").textContent = (lyricShift > 0 ? "+" : "") + lyricShift.toFixed(1) + " s";
+  render();
+}
+$("syUp").onclick = () => { lyricShift = r2(Math.min(lyricShift + 0.1, 5)); syncChanged(); };
+$("syDown").onclick = () => { lyricShift = r2(Math.max(lyricShift - 0.1, -5)); syncChanged(); };
+
+/* ------------------------------------------------------------ sincronización */
+function tick() {
+  const t = player.currentTime + lyricShift;
+  beatTick();
+  if (lines.length) {
+    // línea activa = última que ya empezó (con 0.3 s de adelanto)
+    let idx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].start - 0.3 <= t) idx = i; else break;
+    }
+    if (idx !== activeIdx) {
+      if (activeIdx >= 0 && lineEls[activeIdx]) lineEls[activeIdx].classList.remove("active");
+      lineEls.forEach((el, i) => el.classList.toggle("past", i < idx));
+      activeIdx = idx;
+      if (idx >= 0 && lineEls[idx]) {
+        lineEls[idx].classList.add("active");
+        if (!editMode || !player.paused) {
+          lineEls[idx].scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    }
+    // resaltado palabra por palabra (solo fuera del modo edición)
+    if (!editMode && activeIdx >= 0 && wordEls[activeIdx]) {
+      const words = lines[activeIdx].words, spans = wordEls[activeIdx];
+      for (let j = 0; j < words.length; j++) {
+        const sung = t >= words[j].end;
+        const now = t >= words[j].start && t < words[j].end;
+        spans[j].classList.toggle("sung", sung || now);
+        spans[j].classList.toggle("now", now);
+        spans[j].parentElement.classList.toggle("sung", sung || now);
+        spans[j].parentElement.classList.toggle("now", now);
+      }
+    }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// Al saltar hacia atrás, limpia el resaltado de las líneas siguientes
+player.addEventListener("seeked", () => {
+  wordEls.forEach((spans, i) => {
+    if (i > activeIdx) spans.forEach((s) => s.classList.remove("sung", "now"));
+  });
+});
+</script>
+</body>
+</html>
