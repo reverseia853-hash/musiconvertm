@@ -33,6 +33,9 @@ DEMUCS_MODEL = os.getenv("DEMUCS_MODEL", "htdemucs")
 MAX_MINUTES = int(os.getenv("MAX_MINUTES", "12"))  # duración máxima de un video de YouTube
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "90")) * 1024 * 1024
 MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024
+FREE_TIER_MODE = os.getenv("FREE_TIER_MODE", "false").strip().lower() in {"1", "true", "yes"}
+DEFAULT_SEPARATE = os.getenv("DEFAULT_SEPARATE", "true").strip().lower() in {"1", "true", "yes"}
+DEFAULT_CHORDS = os.getenv("DEFAULT_CHORDS", "true").strip().lower() in {"1", "true", "yes"}
 AUTH_REQUIRED = os.getenv("APP_AUTH_REQUIRED", "false").strip().lower() in {"1", "true", "yes"}
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET", "")
@@ -207,11 +210,20 @@ app.add_middleware(RequestGuardMiddleware)
 
 
 @app.get("/api/auth/session", include_in_schema=False)
-def auth_session(request: Request) -> dict[str, bool]:
+def auth_session(request: Request) -> dict[str, bool | int]:
+    defaults = {
+        "required": AUTH_REQUIRED,
+        "authenticated": not AUTH_REQUIRED,
+        "freeTier": FREE_TIER_MODE,
+        "defaultSeparate": DEFAULT_SEPARATE and not FREE_TIER_MODE,
+        "defaultChords": DEFAULT_CHORDS and not FREE_TIER_MODE,
+        "maxUploadMb": MAX_UPLOAD_BYTES // (1024 * 1024),
+        "maxMinutes": MAX_MINUTES,
+    }
     if not AUTH_REQUIRED:
-        return {"required": False, "authenticated": True}
+        return defaults
     return {
-        "required": True,
+        **defaults,
         "authenticated": _valid_session(request.cookies.get(SESSION_COOKIE_NAME)),
     }
 
@@ -401,7 +413,9 @@ async def create_job(
     quality: str = Form(""),
     chords: bool = Form(True),
 ):
-    model_size = quality if quality in ALLOWED_MODELS else MODEL_SIZE
+    model_size = MODEL_SIZE if FREE_TIER_MODE else quality if quality in ALLOWED_MODELS else MODEL_SIZE
+    separate = separate and not FREE_TIER_MODE
+    chords = chords and not FREE_TIER_MODE
     url = url.strip()
     has_file = bool(file and file.filename)
     if has_file == bool(url):
@@ -434,6 +448,19 @@ async def create_job(
             await file.close()
             if not upload_complete:
                 shutil.rmtree(job_dir, ignore_errors=True)
+        if FREE_TIER_MODE:
+            audio_valid = False
+            try:
+                duration = pipeline.audio_duration(audio_path)
+                if duration > MAX_MINUTES * 60:
+                    raise HTTPException(
+                        400,
+                        f"En el plan gratuito, el audio debe durar {MAX_MINUTES} minutos o menos.",
+                    )
+                audio_valid = True
+            finally:
+                if not audio_valid:
+                    shutil.rmtree(job_dir, ignore_errors=True)
     else:
         if not pipeline.is_youtube_url(url):
             raise HTTPException(400, "Solo se aceptan links de YouTube (youtube.com o youtu.be).")

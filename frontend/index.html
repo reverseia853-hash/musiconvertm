@@ -104,6 +104,12 @@
     border-radius: 10px; background: var(--bg); color: var(--active);
   }
   #authMessage { min-height: 1.4em; margin-top: 12px; color: #ffb4ab; font-size: .9rem; }
+  #freeNotice {
+    max-width: 880px; margin: 10px auto; padding: 10px 16px;
+    border: 1px solid rgba(245, 158, 11, .35); border-radius: 10px;
+    background: rgba(245, 158, 11, .08); color: #fcd9a0; font-size: .85rem; line-height: 1.5;
+  }
+  #freeNotice[hidden] { display: none; }
 
   /* pantalla inicial */
   #lyrics.welcome-mode { max-width: 960px; padding: 8vh 22px 12vh; }
@@ -325,6 +331,7 @@
     <label class="opt" title="Más grande = más preciso pero más lento. 'máxima' es lo mejor para la letra.">
       Calidad
       <select id="quality">
+        <option value="tiny">ultrarrápida (demo)</option>
         <option value="base">rápida</option>
         <option value="small" selected>normal</option>
         <option value="medium">máxima (lenta)</option>
@@ -394,6 +401,7 @@
     <button class="ib chordonly" id="sheetBtn" title="Copia la letra con los acordes encima">📄 Copiar hoja de acordes</button>
   </div>
 </header>
+<aside id="freeNotice" hidden role="note"></aside>
 <button class="ghost" id="exitStage" type="button" aria-label="Salir del modo escenario">✕ Salir</button>
 <div id="bar" role="progressbar" aria-label="Progreso del procesamiento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="barFill"></div></div>
 <div id="editbar">
@@ -513,6 +521,19 @@ async function initializeAuth() {
     if (!response.ok) throw new Error(`No se pudo comprobar el acceso (HTTP ${response.status}).`);
     const session = await response.json();
     authRequired = session.required === true;
+    $("separate").checked = session.defaultSeparate === true;
+    $("chordsOpt").checked = session.defaultChords === true;
+    $("quality").value = session.freeTier ? "tiny" : $("quality").value;
+    $("separate").disabled = session.freeTier === true;
+    $("chordsOpt").disabled = session.freeTier === true;
+    $("quality").disabled = session.freeTier === true;
+    if (session.freeTier) {
+      $("freeNotice").textContent =
+        `Modo gratuito de prueba: audios de hasta ${session.maxMinutes} minutos y ${session.maxUploadMb} MB. ` +
+        "Se usa el modelo rápido y se desactivan Demucs y los acordes para reducir el consumo de memoria. " +
+        "Render puede tardar en despertar el servicio; el procesamiento puede ser lento o fallar por los límites del plan gratuito.";
+      $("freeNotice").hidden = false;
+    }
     if (session.authenticated === true) unlockApp();
     else lockApp("Es necesario iniciar sesión para continuar.");
   } catch (error) {

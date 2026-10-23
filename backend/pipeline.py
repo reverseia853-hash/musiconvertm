@@ -26,6 +26,35 @@ def is_youtube_url(url: str) -> bool:
     return bool(YOUTUBE_RE.match(url.strip()))
 
 
+def audio_duration(audio: Path) -> float:
+    """Devuelve la duración del audio en segundos usando ffprobe."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(audio),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("No se encontró ffprobe. Instala ffmpeg y vuelve a intentarlo.") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("No se pudo determinar la duración del audio a tiempo.") from exc
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "No se pudo leer la duración del audio: " + proc.stderr.strip()[-300:]
+        )
+    try:
+        duration = float(proc.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError("No se pudo determinar la duración del audio.") from exc
+    if not 0 < duration < float("inf"):
+        raise RuntimeError("El archivo de audio tiene una duración no válida.")
+    return duration
+
+
 # ---------------------------------------------------------------- YouTube
 def _youtube_help(exc: Exception) -> str:
     text = re.sub(r"\x1b\[[0-9;]*m", "", str(exc)).strip()

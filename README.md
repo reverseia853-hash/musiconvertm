@@ -97,9 +97,9 @@ karaoke-app/
 
 ## Desplegar en Render
 
-El proyecto incluye un `render.yaml` y un `Dockerfile`. Sube el código a un repositorio Git y conéctalo a Render; desde **New > Blueprint**, selecciona ese repositorio y revisa el plan y el costo antes de aplicar la configuración. El servicio usa el plan `2c-4g` (2 CPU, 4 GB RAM) porque Whisper y Demucs no son adecuados para el plan gratuito de 512 MB.
+El proyecto incluye un `render.yaml` y un `Dockerfile`. Sube el código a un repositorio Git y conéctalo a Render; desde **New > Blueprint**, selecciona ese repositorio y revisa el plan antes de aplicarlo. La configuración actual usa el plan gratuito de Render para una demostración limitada, no para producción.
 
-El contenedor instala FFmpeg, Deno y las dependencias de CPU. El primer uso descarga los modelos de audio y puede tardar más que los siguientes. Render debe ejecutar una sola instancia y un solo worker: los trabajos y su estado se guardan en memoria. Los archivos son temporales; se pierden al reiniciar o desplegar el servicio. No uses esta configuración para conservar canciones ni resultados entre despliegues.
+El plan gratuito dispone de 512 MB RAM y CPU compartida; Render suspende la instancia tras 15 minutos sin tráfico y su sistema de archivos es efímero. Por eso el perfil gratuito usa Whisper `tiny`, admite audios de hasta 3 minutos y 20 MB, y desactiva Demucs y los acordes. Incluso con estas reducciones no se garantiza que una transcripción termine: puede ser lenta, quedarse sin memoria o perderse si la instancia se reinicia. Render debe ejecutar una sola instancia y un solo worker; los trabajos y su estado se guardan en memoria. No uses esta configuración para producción, privacidad de datos sensibles ni conservar canciones/resultados.
 
 Antes de desplegar, define `APP_PASSWORD` en Render con una contraseña aleatoria de al menos 16 caracteres, usando un gestor de contraseñas. Render genera `APP_SESSION_SECRET` automáticamente. La aplicación protege sus API con una cookie firmada, `HttpOnly`, `SameSite=Strict` y `Secure`; la sesión vence a las 12 horas. La página de acceso sigue siendo visible para permitir iniciar sesión, pero las operaciones y los resultados requieren una sesión válida. No compartas la contraseña en el repositorio ni en el chat.
 
@@ -114,14 +114,14 @@ Para publicar, el proyecto debe estar en un repositorio Git conectado a Render. 
 3. Móvil y accesibilidad
 4. Progreso, errores y recuperación
 5. Pulido y preparación para despliegue (completada)
-6. Despliegue real en Render y comprobación de producción (en curso)
+6. Despliegue de demostración gratuito en Render (en curso)
 
 ### Lista segura antes de publicar el repositorio
 
 1. Instala Git y crea un repositorio **privado** para el proyecto.
 2. Comprueba que `.gitignore` excluye los entornos virtuales, `backend/uploads/` y archivos `.env`; nunca subas contraseñas, tokens ni audio de usuarios.
 3. Sube el código desde tu equipo y conecta ese repositorio a Render usando **New > Blueprint**.
-4. Antes de aplicar el Blueprint, revisa el plan `2c-4g` y el precio mostrado por Render.
+4. Antes de aplicar el Blueprint, confirma que el plan sea `free` y que el costo sea `$0`.
 5. Introduce `APP_PASSWORD` directamente en la configuración secreta de Render (mínimo 16 caracteres). No la pongas en el repositorio, un archivo compartido ni el chat. Render genera `APP_SESSION_SECRET`.
 6. Tras el primer despliegue, verifica `/api/health`, la pantalla de acceso, un inicio/cierre de sesión y un audio corto. El estado `/api/health` solo indica que la API responde; no confirma que los modelos ya estén cargados.
 
