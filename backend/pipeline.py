@@ -16,6 +16,21 @@ from pathlib import Path
 from typing import Callable
 
 ProgressFn = Callable[[float], None]
+CancelledFn = Callable[[], bool]
+
+SINGING_VAD_THRESHOLD = 0.15
+NO_SPEECH_THRESHOLD = 0.6
+TRANSCRIPTION_MODES = {"vad", "no_vad", "compare"}
+SEPARATION_LEVELS = {
+    "low": {"shifts": 1, "overlap": 0.1},
+    "medium": {"shifts": 2, "overlap": 0.25},
+    "high": {"shifts": 4, "overlap": 0.5},
+}
+
+
+class JobCancelled(Exception):
+    """Raised when a user requests cancellation of a background job."""
+
 
 YOUTUBE_RE = re.compile(
     r"^https?://(?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be)/", re.IGNORECASE
@@ -73,8 +88,12 @@ def download_youtube(
     on_progress: ProgressFn,
     max_minutes: int = 12,
     max_bytes: int | None = None,
+    is_cancelled: CancelledFn | None = None,
 ) -> tuple[Path, str]:
     """Descarga el audio como mp3. Devuelve (ruta_del_audio, titulo)."""
+    is_cancelled = is_cancelled or (lambda: False)
+    if is_cancelled():
+        raise JobCancelled()
     try:
         import yt_dlp
     except ImportError as exc:
@@ -85,8 +104,14 @@ def download_youtube(
     try:
         with yt_dlp.YoutubeDL(base) as ydl:
             info = ydl.extract_info(url, download=False)
+    except JobCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001
+        if is_cancelled():
+            raise JobCancelled() from exc
         raise RuntimeError(_youtube_help(exc)) from exc
+    if is_cancelled():
+        raise JobCancelled()
 
     if info.get("_type") == "playlist" or info.get("entries"):
         raise RuntimeError("Pega el link de un solo video, no de una lista de reproducción.")
@@ -100,6 +125,8 @@ def download_youtube(
     title = info.get("title") or "YouTube"
 
     def hook(d: dict) -> None:
+        if is_cancelled():
+            raise JobCancelled()
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             if total:
@@ -118,7 +145,11 @@ def download_youtube(
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
+    except JobCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001
+        if is_cancelled():
+            raise JobCancelled() from exc
         raise RuntimeError(_youtube_help(exc)) from exc
 
     audio = job_dir / "original.mp3"
@@ -132,16 +163,28 @@ def download_youtube(
 
 # ----------------------------------------------------------------- Demucs
 def separate_vocals(
-    audio: Path, job_dir: Path, on_progress: ProgressFn, model: str = "htdemucs"
+    audio: Path,
+    job_dir: Path,
+    on_progress: ProgressFn,
+    model: str = "htdemucs",
+    is_cancelled: CancelledFn | None = None,
+    separation_level: str = "low",
 ) -> Path:
     """Aísla la voz con Demucs (CPU). Devuelve la ruta de vocals.mp3."""
+    is_cancelled = is_cancelled or (lambda: False)
+    if is_cancelled():
+        raise JobCancelled()
+    if separation_level not in SEPARATION_LEVELS:
+        raise ValueError(f"Nivel de separación no válido: {separation_level}")
+    profile = SEPARATION_LEVELS[separation_level]
     out_dir = job_dir / "separated"
     cmd = [
         sys.executable, "-m", "demucs.separate",
         "-n", model,
         "--two-stems=vocals",
         "--mp3", "--mp3-bitrate", "192",   # evita depender de torchaudio.save
-        "--overlap", "0.1",                # por defecto 0.25: menos trabajo repetido
+        "--shifts", str(profile["shifts"]),
+        "--overlap", str(profile["overlap"]),
         "-d", "cpu",
         "-o", str(out_dir),
         str(audio),
@@ -154,16 +197,38 @@ def separate_vocals(
     assert proc.stdout is not None
     buf = b""
     best = 0
-    while True:
-        chunk = proc.stdout.read1(512)
-        if not chunk:
-            break
-        buf = (buf + chunk)[-3000:]
-        found = re.findall(rb"(\d{1,3})%\|", buf)  # barra de progreso (tqdm)
-        if found:
-            best = max(best, min(int(found[-1]), 100))
-            on_progress(best / 100)
-    code = proc.wait()
+
+    def stop_process() -> None:
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+    try:
+        while True:
+            if is_cancelled():
+                raise JobCancelled()
+            chunk = proc.stdout.read1(512)
+            if not chunk:
+                break
+            buf = (buf + chunk)[-3000:]
+            found = re.findall(rb"(\d{1,3})%\|", buf)  # barra de progreso (tqdm)
+            if found:
+                best = max(best, min(int(found[-1]), 100))
+                on_progress(best / 100)
+        code = proc.wait()
+    finally:
+        if proc.poll() is None:
+            stop_process()
+        proc.stdout.close()
+    if is_cancelled():
+        raise JobCancelled()
 
     if code != 0:
         tail = buf.decode("utf-8", errors="replace").replace("\r", "\n").strip()[-600:]
@@ -226,14 +291,19 @@ def transcribe(
     on_progress: ProgressFn,
     vad: bool = True,
     offset: float = 0.0,
+    is_cancelled: CancelledFn | None = None,
 ) -> list[dict]:
     """`vad=False` no descarta ningún tramo; `offset` suma segundos a todos los tiempos."""
+    is_cancelled = is_cancelled or (lambda: False)
     segments, info = model.transcribe(
         str(audio),
         language=language or None,
         word_timestamps=True,
         vad_filter=vad,  # ignora silencios/instrumentales
-        vad_parameters={"threshold": 0.3, "min_silence_duration_ms": 500},
+        vad_parameters=(
+            {"threshold": SINGING_VAD_THRESHOLD, "min_silence_duration_ms": 500}
+            if vad else None
+        ),
         condition_on_previous_text=False,  # evita bucles de texto repetido
         beam_size=beam_size,
         initial_prompt="Letra de una canción en español.",
@@ -241,13 +311,15 @@ def transcribe(
         # por "sospechosos". Estos umbrales son más tolerantes que los de fábrica.
         compression_ratio_threshold=3.0,   # por defecto 2.4
         log_prob_threshold=-1.5,           # por defecto -1.0
-        no_speech_threshold=0.8,           # por defecto 0.6
+        no_speech_threshold=NO_SPEECH_THRESHOLD,
         temperature=[0.0, 0.2, 0.4, 0.6],  # reintenta con más variación si falla
     )
     duration = getattr(info, "duration", 0) or 1.0
 
     result: list[dict] = []
     for seg in segments:
+        if is_cancelled():
+            raise JobCancelled()
         words = [
             {
                 "word": w.word.strip(),
@@ -267,4 +339,56 @@ def transcribe(
                 }
             )
         on_progress(min(seg.end / duration, 1.0))
+    if is_cancelled():
+        raise JobCancelled()
     return result
+
+
+def transcribe_mode(
+    model,
+    audio: Path,
+    language: str,
+    beam_size: int,
+    on_progress: ProgressFn,
+    mode: str,
+    on_stage: Callable[[str], None] | None = None,
+    is_cancelled: CancelledFn | None = None,
+) -> tuple[list[dict], list[dict] | None]:
+    """Transcribe with VAD, without VAD, or return both versions for review."""
+    if mode not in TRANSCRIPTION_MODES:
+        raise ValueError(f"Modo de transcripción no válido: {mode}")
+    is_cancelled = is_cancelled or (lambda: False)
+
+    def report_progress(progress: float) -> None:
+        if is_cancelled():
+            raise JobCancelled()
+        on_progress(progress)
+
+    def report_stage(name: str) -> None:
+        if on_stage:
+            on_stage(name)
+
+    if mode == "vad":
+        report_stage("transcribing")
+        return transcribe(model, audio, language, beam_size, report_progress, vad=True,
+                          is_cancelled=is_cancelled), None
+
+    if mode == "no_vad":
+        report_stage("transcribing")
+        return transcribe(model, audio, language, max(beam_size, 5), report_progress, vad=False,
+                          is_cancelled=is_cancelled), None
+
+    report_stage("transcribing")
+    primary = transcribe(
+        model, audio, language, beam_size,
+        lambda progress: report_progress(progress * 0.5), vad=True, is_cancelled=is_cancelled,
+    )
+    if is_cancelled():
+        raise JobCancelled()
+    report_stage("transcribing_alternative")
+    alternative = transcribe(
+        model, audio, language, max(beam_size, 5),
+        lambda progress: report_progress(0.5 + progress * 0.5), vad=False,
+        is_cancelled=is_cancelled,
+    )
+    return primary, alternative

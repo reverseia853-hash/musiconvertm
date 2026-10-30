@@ -6,6 +6,7 @@
 <title>Musiconvert</title>
 <meta name="description" content="Convierte canciones en letras sincronizadas y practica con acordes, tempo y un reproductor tipo karaoke." />
 <meta name="theme-color" content="#0a0a0f" />
+<link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='1' stop-color='%232dd4a7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%230a0a0f'/%3E%3Ctext x='32' y='49' font-family='Arial' font-weight='900' font-size='46' text-anchor='middle' fill='url(%23g)'%3EM%3C/text%3E%3C/svg%3E" />
 <style>
   :root {
@@ -74,13 +75,31 @@
   body.opts #opts { display: flex; }
   #songline { font-size: .85rem; padding: 6px 2px 0; color: var(--text); }
   #fileName { color: var(--active); font-weight: 600; }
-  #status { padding: 10px 20px; font-size: .9rem; max-width: 880px; margin: 0 auto; }
+  #status { max-width: 880px; margin: 12px auto; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(20,20,28,.72); font-size: .9rem; line-height: 1.5; }
   #bar { height: 3px; background: var(--border); }
   #barFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .4s; }
+  #processActions { display: flex; justify-content: center; padding: 8px 12px 0; }
+  #cancelProcess { min-height: 38px; }
+  #processActions[hidden], #cancelProcess[hidden] { display: none; }
   #recovery { max-width: 880px; margin: 0 auto; padding: 0 20px 12px; }
   #recovery[hidden] { display: none; }
   #recovery .recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  #status[role="alert"] { color: #ffb4ab; }
+  #lyricFallback {
+    max-width: 880px; margin: 14px auto; padding: 16px 20px;
+    border: 1px solid rgba(139,92,246,.32); border-radius: 16px;
+    background: linear-gradient(135deg, rgba(139,92,246,.1), rgba(20,20,28,.96) 55%);
+    box-shadow: 0 12px 32px rgba(0,0,0,.18);
+  }
+  #lyricFallback[hidden], #lyricFallbackResult[hidden],
+  #lyricFallbackPreview[hidden], #lyricFallbackOriginalPreview[hidden] { display: none; }
+  #lyricFallback p { margin: 0 0 10px; line-height: 1.55; }
+  #lyricFallback .fallback-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  #lyricFallbackPreview, #lyricFallbackOriginalPreview { margin-top: 10px; }
+  #lyricFallbackPreview pre {
+    max-height: 28vh; overflow: auto; white-space: pre-wrap; font: inherit;
+    padding: 10px; border-radius: 8px; background: var(--bg);
+  }
+  #status[role="alert"] { border-color: rgba(255,180,171,.3); background: rgba(120,35,35,.16); color: #ffb4ab; }
   html.auth-check body > :not(#authGate), body.auth-locked > :not(#authGate) {
     visibility: hidden !important; pointer-events: none !important;
   }
@@ -134,7 +153,10 @@
   }
   .tab:hover { color: var(--active); }
   .tab.on { background: var(--panel2); color: #fff; box-shadow: inset 0 0 0 1px var(--border); }
-  .panel { display: none; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 2px 4px; font-size: .85rem; }
+  .panel { display: none; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(145deg, rgba(29,29,41,.94), rgba(20,20,28,.94)); box-shadow: 0 10px 28px rgba(0,0,0,.16); font-size: .85rem; }
+  .tab { border: 1px solid transparent; transition: background .16s, color .16s, border-color .16s; }
+  .tab:hover { background: rgba(255,255,255,.05); }
+  .tab.on { border-color: rgba(139,92,246,.35); background: rgba(139,92,246,.14); }
   body[data-tab="chords"] #p-chords, body[data-tab="tempo"] #p-tempo,
   body[data-tab="view"] #p-view, body[data-tab="export"] #p-export { display: flex; }
   .panel b { color: var(--active); }
@@ -183,6 +205,10 @@
   .line:hover { opacity: .55; }
   .line.active { opacity: 1; transform: scale(1.02); }
   .line.past { opacity: .45; }
+  .line.instrumental { padding: 8px 12px; border-left: 3px solid var(--accent2); border-radius: 4px; background: rgba(139,92,246,.08); font-size: calc(var(--fs) * clamp(1rem, 2.2vw, 1.4rem)); }
+  .instrumental-label { display: block; margin-bottom: 4px; color: var(--text); font-size: .72em; font-weight: 600; letter-spacing: 0; }
+  .instrumental-chords { display: flex; flex-wrap: wrap; gap: 6px; color: var(--accent2); }
+  .instrumental-chords .cs { min-height: 32px; padding: 0 6px; font-size: .9em; }
   .w { transition: color .12s; }
   .w.sung { color: var(--sung); }
   .line.active .w.now { color: #fff; text-shadow: 0 0 18px var(--accent); }
@@ -209,6 +235,7 @@
   #chordMenu.on { display: block; }
   #chordMenu h4 { margin: 0 0 8px; font-size: .9rem; color: var(--active); }
   #chordMenu .row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+  #chordMenu .row[hidden] { display: none; }
   #measureDlg, #lyricsDlg {
     background: var(--panel); color: var(--text); border: 1px solid var(--border);
     border-radius: 16px; width: min(700px, 92vw); padding: 18px;
@@ -254,7 +281,8 @@
   #exitStage { display: none; position: fixed; top: 14px; right: 14px; z-index: 30; }
 
   /* modo escenario */
-  body.stage header, body.stage #status, body.stage #bar, body.stage #editbar { display: none !important; }
+  body.stage header, body.stage #status, body.stage #bar, body.stage #editbar,
+  body.stage #lyricFallback { display: none !important; }
   body.stage #exitStage { display: inline-block; }
   body.stage { --fs: 1.35; background: #000; }
   body.stage #lyrics { max-width: 1200px; padding-top: 30vh; }
@@ -295,6 +323,317 @@
     .ghost { padding-left: 10px; padding-right: 10px; }
     .welcome-step { grid-template-columns: 1fr; gap: 5px; }
   }
+
+  /* visual refresh */
+  :root {
+    --bg: #0b1020;
+    --panel: #121a2b;
+    --panel2: #1a2539;
+    --text: #b4bfd2;
+    --active: #f7f9ff;
+    --accent: #9b87ff;
+    --accent2: #57e0bd;
+    --sung: #c6f7e9;
+    --border: #28344a;
+  }
+  body {
+    padding-bottom: 104px;
+    background:
+      radial-gradient(900px 480px at 8% -18%, rgba(110, 92, 220, .17), transparent 68%),
+      radial-gradient(760px 420px at 100% 8%, rgba(48, 180, 154, .08), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  header {
+    padding: 14px clamp(16px, 3vw, 36px) 12px;
+    background: rgba(11, 16, 32, .94);
+    border-color: rgba(130, 151, 184, .16);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .18);
+  }
+  .top, #opts, #songline, #tabs, .panel {
+    width: min(100%, 1360px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .top { gap: 10px; }
+  .brand { margin-right: 8px; }
+  .brand .m { font-size: 2.15rem; }
+  .brand .rest { font-size: 1.1rem; }
+  .file-btn, .ghost, .ib, select, .url-form input {
+    transition: border-color .18s, background .18s, color .18s, box-shadow .18s, transform .18s;
+  }
+  .file-btn {
+    background: linear-gradient(135deg, #8c70ff, #7058db);
+    box-shadow: 0 5px 18px rgba(124, 98, 237, .25);
+  }
+  .file-btn:hover { transform: translateY(-1px); }
+  .ghost {
+    color: #d2d9e8;
+    border-color: #344159;
+    background: rgba(23, 33, 51, .68);
+  }
+  .ghost:hover, .ib:hover { border-color: #71809d; background-color: #202d43; }
+  .url-form { flex: 1 1 300px; }
+  .url-form input {
+    border-color: #344159;
+    background: #111a2b;
+  }
+  .url-form input::placeholder { color: #8996ad; }
+  #opts {
+    gap: 14px 22px;
+    padding: 13px 16px 5px;
+  }
+  #opts .opt {
+    min-height: 40px;
+    padding: 7px 11px;
+    border: 1px solid rgba(130, 151, 184, .15);
+    border-radius: 11px;
+    background: rgba(24, 35, 54, .62);
+    color: #d2d9e8;
+  }
+  #opts select, .panel select, #speed, #chordMenu select {
+    min-height: 38px;
+    border-color: #35425b;
+    background-color: #111a2b;
+    color: var(--active);
+  }
+  #songline {
+    min-height: 26px;
+    padding: 5px 4px 0;
+    color: #99a8c0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #fileName { color: #edf1fb; }
+  #tabs {
+    gap: 8px;
+    margin-top: 9px;
+    border-bottom: 1px solid rgba(130, 151, 184, .14);
+  }
+  .tab {
+    min-height: 42px;
+    padding: 7px 15px;
+    color: #aab6cb;
+    border-radius: 12px 12px 0 0;
+    font-size: .9rem;
+  }
+  .tab.on {
+    color: #f4f1ff;
+    border-color: rgba(155, 135, 255, .28);
+    background: linear-gradient(180deg, rgba(137, 112, 255, .16), rgba(137, 112, 255, .06));
+  }
+  .panel {
+    gap: 10px 14px;
+    margin-top: 10px;
+    padding: 14px 16px;
+    border-color: rgba(130, 151, 184, .18);
+    border-radius: 15px;
+    background: linear-gradient(145deg, rgba(24, 35, 54, .97), rgba(17, 26, 43, .97));
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .16);
+    color: #c4cede;
+  }
+  .panel .hint { color: #aab6cb; line-height: 1.55; }
+  .panel .tr { min-height: 40px; }
+  .ib {
+    border-color: #35425b;
+    border-radius: 10px;
+    background: #1b2740;
+    color: #e0e6f2;
+  }
+  .ib.big {
+    color: #f6f4ff;
+    border-color: rgba(155, 135, 255, .65);
+    background: rgba(137, 112, 255, .18);
+  }
+  .ib.big:hover { background: rgba(137, 112, 255, .28); }
+  #status {
+    width: min(calc(100% - 32px), 1040px);
+    margin: 14px auto;
+    padding: 11px 16px;
+    border-color: rgba(130, 151, 184, .19);
+    border-radius: 12px;
+    background: rgba(18, 26, 43, .82);
+    color: #cad4e5;
+  }
+  #status[role="alert"] {
+    border-color: rgba(255, 155, 153, .4);
+    background: rgba(116, 42, 55, .24);
+    color: #ffc7c4;
+  }
+  #bar { height: 3px; background: rgba(130, 151, 184, .14); }
+  #recovery, #lyricFallback { width: min(calc(100% - 32px), 1040px); }
+  #lyricFallback {
+    padding: 17px 20px;
+    border-color: rgba(155, 135, 255, .34);
+    background: linear-gradient(135deg, rgba(103, 83, 193, .16), rgba(18, 26, 43, .97) 58%);
+  }
+  #lyricFallbackTitle { color: #f2efff; font-weight: 700; }
+  #lyricFallback .hint { color: #b5bfd2; }
+  #lyrics {
+    width: min(100%, 980px);
+    padding: clamp(46px, 9vh, 104px) 30px 44vh;
+    scroll-behavior: smooth;
+  }
+  .line {
+    margin: 12px 0;
+    padding: 5px 14px;
+    border-left: 3px solid transparent;
+    border-radius: 0 12px 12px 0;
+    color: #d0d8e7;
+    font-size: calc(var(--fs) * clamp(1.45rem, 3.2vw, 2.25rem));
+    font-weight: 720;
+    line-height: 1.48;
+    letter-spacing: -.025em;
+    opacity: .58;
+    transition: opacity .22s, background .22s, border-color .22s, color .22s;
+  }
+  .line:hover { opacity: .82; }
+  .line.active {
+    border-left-color: var(--accent2);
+    background: linear-gradient(90deg, rgba(87, 224, 189, .1), rgba(87, 224, 189, .025) 76%, transparent);
+    color: #f5f7fd;
+    opacity: 1;
+    transform: none;
+  }
+  .line.past { opacity: .72; }
+  .line.active .w.now { color: #fff; text-shadow: 0 0 18px rgba(87, 224, 189, .42); }
+  .line.instrumental {
+    border: 1px solid rgba(155, 135, 255, .2);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px;
+    background: rgba(137, 112, 255, .07);
+  }
+  .instrumental-label { color: #b9aedf; }
+  .ch { color: var(--accent2); }
+  .cs { border-radius: 7px; }
+  .cs:hover { background: rgba(87, 224, 189, .13); }
+  .cs.low { color: #f2bf74; opacity: 1; }
+  .empty { color: #aebbd0; line-height: 1.6; }
+  .welcome {
+    border-color: rgba(130, 151, 184, .2);
+    border-radius: 28px;
+    background:
+      radial-gradient(600px 300px at 50% 0, rgba(137, 112, 255, .18), transparent),
+      linear-gradient(145deg, rgba(24, 35, 54, .98), rgba(17, 26, 43, .98));
+    box-shadow: 0 26px 78px rgba(0, 0, 0, .26);
+  }
+  .welcome-mark {
+    border-color: rgba(87, 224, 189, .32);
+    background: rgba(87, 224, 189, .1);
+    color: var(--accent2);
+  }
+  .welcome-step {
+    border-color: rgba(130, 151, 184, .17);
+    background: rgba(11, 16, 32, .48);
+  }
+  .welcome-step p { color: #b4bfd2; }
+  #dock {
+    display: grid;
+    grid-template-columns: auto auto minmax(100px, 1fr) auto auto;
+    gap: 10px 14px;
+    padding: 11px clamp(16px, 3vw, 36px);
+    border-color: rgba(130, 151, 184, .18);
+    background: rgba(13, 19, 34, .96);
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, .2);
+  }
+  #playBtn {
+    width: 50px;
+    height: 50px;
+    color: #071813;
+    background: var(--accent2);
+    box-shadow: 0 5px 20px rgba(87, 224, 189, .22);
+  }
+  #dock .tm { color: #c0cadd; font-variant-numeric: tabular-nums; }
+  #seek { accent-color: var(--accent2); }
+  #speed { min-width: 72px; padding: 6px 9px; border-radius: 10px; }
+  #editbar {
+    gap: 9px;
+    padding: 11px clamp(16px, 3vw, 36px);
+    border-color: rgba(130, 151, 184, .16);
+    background: rgba(18, 26, 43, .98);
+    color: #c4cede;
+  }
+  #chordMenu, #measureDlg, #lyricsDlg {
+    border-color: #344159;
+    background: #151f32;
+    color: #c4cede;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
+  }
+  #lyricsDlg::backdrop, #measureDlg::backdrop { background: rgba(4, 8, 18, .76); }
+  #lyricsDlg textarea, #measureDlg textarea, .line.edit .txt {
+    border-color: #35425b;
+    background: #0d1525;
+    color: #f0f3fa;
+  }
+  #lyricsOut .big, #measureOut .big { color: #f5f7fd; }
+  button:disabled, select:disabled, input:disabled { cursor: not-allowed; opacity: .55; }
+  :focus-visible { outline-color: #72efd0; }
+
+  @media (min-width: 1000px) {
+    .top { flex-wrap: nowrap; }
+    .brand { flex: 0 0 auto; }
+    #pick { flex: 0 0 auto; }
+    .url-form { min-width: 240px; }
+  }
+  @media (max-width: 760px) {
+    body { padding-bottom: calc(94px + env(safe-area-inset-bottom)); }
+    header { padding: 10px 14px 9px; }
+    .top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+    }
+    .brand { margin-right: auto; }
+    #pick { min-height: 42px; padding: 8px 13px; }
+    .brand { grid-column: 1; grid-row: 1; }
+    #pick { grid-column: 2; grid-row: 1; }
+    #optBtn { grid-column: 3; grid-row: 1; }
+    #urlForm { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+    #editBtn { grid-column: 1; grid-row: 3; justify-self: start; }
+    #stageBtn { grid-column: 2; grid-row: 3; justify-self: start; }
+    #logoutBtn { grid-column: 3; grid-row: 3; justify-self: end; }
+    #optBtn, #editBtn, #stageBtn, #logoutBtn { min-height: 40px; padding: 7px 11px; font-size: .82rem; }
+    #opts { padding: 10px 0 2px; gap: 8px; }
+    #opts .opt { min-height: 38px; }
+    #songline { padding-top: 5px; }
+    body.hasLyrics #tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; overflow: visible; }
+    .tab { min-width: 0; width: 100%; min-height: 40px; padding: 6px 6px; font-size: .78rem; line-height: 1.2; white-space: normal; }
+    .panel { gap: 8px; padding: 11px 12px; }
+    .panel .hint { flex-basis: 100%; }
+    #lyrics { padding: 42px 18px 38vh; }
+    #lyrics.welcome-mode { padding: 24px 14px 36px; }
+    .line { margin: 9px 0; padding: 5px 10px; font-size: calc(var(--fs) * clamp(1.35rem, 5vw, 2rem)); }
+    #dock { grid-template-columns: auto auto minmax(44px, 1fr) auto; gap: 7px 9px; padding: 8px 14px calc(8px + env(safe-area-inset-bottom)); }
+    #speed { display: none; }
+    #playBtn { width: 46px; height: 46px; }
+    #dock .tm { min-width: 37px; font-size: .76rem; }
+    #seek { min-width: 36px; min-height: 38px; }
+    #editbar { padding: 9px 14px; gap: 7px; }
+    #recovery, #lyricFallback, #status { width: calc(100% - 24px); }
+    #recovery { padding: 0 0 8px; }
+  }
+  @media (max-width: 420px) {
+    .brand .m { font-size: 1.9rem; }
+    .brand .rest { font-size: 1rem; }
+    #pick { font-size: .82rem; }
+    .ghost { padding-left: 9px; padding-right: 9px; }
+    .tab { padding: 6px 3px; font-size: .72rem; }
+    #lyrics.welcome-mode { padding: 24px 12px 36px; }
+    .welcome { padding: 25px 17px; }
+    .welcome h1 { font-size: 1.8rem; }
+    .welcome-step { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    #dock { grid-template-columns: auto auto minmax(32px, 1fr) auto; gap: 5px; padding-left: 9px; padding-right: 9px; }
+  }
+  @media (max-width: 360px) {
+    .top { grid-template-columns: minmax(0, 1fr) auto; }
+    #optBtn { grid-column: 1; grid-row: 3; justify-self: start; }
+    #editBtn { grid-column: 2; grid-row: 3; }
+    #stageBtn { grid-column: 1; grid-row: 4; }
+    #logoutBtn { grid-column: 2; grid-row: 4; }
+    #urlForm { grid-row: 2; }
+  }
 </style>
 </head>
 <body>
@@ -322,16 +661,34 @@
     <button class="ghost" id="optBtn" type="button" aria-expanded="false" aria-controls="opts" title="Calidad, separar voz, acordes">⚙ Opciones</button>
     <button class="ghost" id="editBtn" type="button" aria-pressed="false" disabled>✏️ Editar</button>
     <button class="ghost" id="stageBtn" type="button" aria-pressed="false" aria-label="Activar modo escenario a pantalla completa" title="Letra grande a pantalla completa">⛶ Escenario</button>
+    <button class="ghost" id="installAppBtn" type="button" hidden>⬇ Instalar app</button>
     <button class="ghost" id="logoutBtn" type="button" hidden>Cerrar sesión</button>
   </div>
   <div id="opts">
-    <label class="opt" title="Aísla la voz antes de transcribir: más lento pero más preciso">
+    <label class="opt" title="Aísla la voz antes de transcribir; puede ayudar en algunas canciones, pero tarda más">
       <input type="checkbox" id="separate" checked /> Separar voz
     </label>
-    <label class="opt" title="Más grande = más preciso pero más lento. 'máxima' es lo mejor para la letra.">
+    <label class="opt" title="Aumenta las pasadas de Demucs para intentar aislar mejor la voz; puede tardar más y no garantiza mayor precisión.">
+      Nivel de aislamiento
+      <select id="separationLevel">
+        <option value="low" selected>Poco (actual, más rápido)</option>
+        <option value="medium">Medio (más lento)</option>
+        <option value="high">Mucho (el más lento)</option>
+      </select>
+    </label>
+    <span class="hint">Medio y Mucho hacen más pasadas para separar voz y acompañamiento. Pueden tardar bastante más y el resultado depende de la canción.</span>
+    <label class="opt" title="Elige cómo analizar la letra. Comparar ejecuta dos pasadas y tarda más.">
+      Modo de letra
+      <select id="transcriptionMode">
+        <option value="vad" selected>Actual (con VAD)</option>
+        <option value="no_vad">Sin VAD</option>
+        <option value="compare">Comparar ambas (más lento)</option>
+      </select>
+    </label>
+    <label class="opt" title="Los modelos grandes suelen reconocer mejor la voz, pero pueden tardar más y usar más memoria">
       Calidad
       <select id="quality">
-        <option value="tiny">ultrarrápida (demo)</option>
+        <option value="tiny">ultrarrápida (menor precisión)</option>
         <option value="base">rápida</option>
         <option value="small" selected>normal</option>
         <option value="medium">máxima (lenta)</option>
@@ -343,14 +700,24 @@
   </div>
   <div id="songline"><span id="fileName"></span></div>
   <nav id="tabs" aria-label="Herramientas de canción">
-    <button class="tab chordonly" data-tab="chords" aria-controls="p-chords" aria-expanded="false">🎸 Acordes</button>
+    <button class="tab" data-tab="chords" aria-controls="p-chords" aria-expanded="false">🎸 Acordes</button>
     <button class="tab" data-tab="tempo" aria-controls="p-tempo" aria-expanded="false">♩ Tempo</button>
     <button class="tab" data-tab="view" aria-controls="p-view" aria-expanded="false">Aa Vista y sincronía</button>
     <button class="tab" data-tab="export" aria-controls="p-export" aria-expanded="false">⬇ Exportar</button>
   </nav>
 
   <div id="p-chords" class="panel" role="region" aria-label="Herramientas de acordes">
+    <button class="ib big" id="addChordBtn" type="button" title="Pausa o busca el momento exacto y agrega un acorde en esa posición">＋ Agregar acorde aquí</button>
+    <span class="hint">Haz clic en un acorde para corregirlo o quitarlo; pausa o busca el momento exacto para agregar uno.</span>
+    <span class="hint" id="noChordsHint" hidden>No se detectaron acordes. Puedes agregarlos manualmente con el reproductor.</span>
     <span class="chordonly tr">Tono: <b id="keyTxt">–</b></span>
+    <label class="tr chordonly" title="Cambia solo cómo se muestran los nombres de acordes">
+      Cifrado
+      <select id="chordNotation" aria-label="Cifrado de acordes">
+        <option value="letters" selected>C, D, E…</option>
+        <option value="solfege">Do, Re, Mi…</option>
+      </select>
+    </label>
     <span class="tr chordonly">Transponer
       <button class="ib" id="trDown" title="Bajar un semitono">−</button>
       <b id="trVal">0</b>
@@ -369,8 +736,8 @@
       <span class="bpmbig" id="bpmTxt">–</span>
       <button class="ib" id="bpmPlus" title="Subir 0.5 BPM">＋</button> BPM
     </span>
-    <button class="ib" id="bpmHalf" title="El tempo mostrado es el doble del real">÷2</button>
-    <button class="ib" id="bpmDouble" title="El tempo mostrado es la mitad del real">×2</button>
+    <button class="ib" id="bpmHalf" title="Cambiar a la mitad de esta interpretación del pulso">÷2</button>
+    <button class="ib" id="bpmDouble" title="Cambiar al doble de esta interpretación del pulso">×2</button>
     <span id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
     <button class="ib big" id="tapBtn" title="Toca al ritmo de la canción (o tecla T), 4 o más veces">👆 Tocar el ritmo</button>
     <span id="tapInfo" class="hint" aria-live="polite"></span>
@@ -379,7 +746,8 @@
       <button class="ib" id="beatBack" aria-label="Mover los pulsos antes">◀</button><button class="ib" id="beatFwd" aria-label="Mover los pulsos después">▶</button>
     </span>
     <label class="opt"><input type="checkbox" id="clickOpt" /> 🔔 Click</label>
-    <span class="hint">Cómo usarlo: dale play, <b>toca al ritmo 4–8 veces</b> y ajusta con − ＋ hasta que el click coincida. Cuando oigas el primer tiempo del compás, pulsa <b>① El 1 está aquí</b>.</span>
+    <span id="bpmInterpretation" class="hint" aria-live="polite"></span>
+    <span class="hint">El BPM marca el pulso; un acorde puede cambiar en un pulso, entre pulsos o durar varios. Para validar el tempo: dale play, <b>toca al ritmo 4–8 veces</b> y ajusta con − ＋ hasta que el click coincida. Cuando oigas el primer tiempo del compás, pulsa <b>① El 1 está aquí</b>.</span>
   </div>
 
   <div id="p-view" class="panel" role="region" aria-label="Vista y sincronización">
@@ -399,11 +767,15 @@
     <button class="ib big" id="pdfBtn" title="Descarga la letra (con acordes si hay) como PDF">📕 Descargar PDF</button>
     <button class="ib big" id="pngBtn" title="Descarga la letra (con acordes si hay) como imagen PNG">🖼️ Descargar imagen</button>
     <button class="ib chordonly" id="sheetBtn" title="Copia la letra con los acordes encima">📄 Copiar hoja de acordes</button>
+    <span class="hint">PDF e imagen: una sola hoja; la letra se adapta al espacio disponible.</span>
   </div>
 </header>
 <aside id="freeNotice" hidden role="note"></aside>
 <button class="ghost" id="exitStage" type="button" aria-label="Salir del modo escenario">✕ Salir</button>
 <div id="bar" role="progressbar" aria-label="Progreso del procesamiento" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="barFill"></div></div>
+<div id="processActions" hidden>
+  <button class="ghost" id="cancelProcess" type="button">✕ Cancelar proceso</button>
+</div>
 <div id="editbar">
   <span>Modo edición:</span>
   <button class="ghost" id="addBtn">＋ Línea en el tiempo actual</button>
@@ -415,6 +787,28 @@
   <span>Pausa la canción donde quieras usar ⏱ (marcar inicio) o ＋.</span>
 </div>
 <div id="status" role="status" aria-live="polite" aria-atomic="true">Elige un archivo de audio o pega un link para generar la letra.</div>
+<aside id="lyricFallback" hidden aria-labelledby="lyricFallbackTitle">
+  <p id="lyricFallbackTitle"></p>
+  <p id="lyricFallbackHint" class="hint">Se conserva la versión actual. La segunda pasada desactiva VAD, pero mantiene el rechazo de segmentos con alta probabilidad de silencio. Usa la voz separada si está disponible, puede tardar varios minutos y aun así confundir música con palabras.</p>
+  <div class="fallback-actions">
+    <button class="ib big" id="lyricFallbackStart" type="button">▶ Iniciar segunda pasada sin VAD</button>
+  </div>
+  <div id="lyricFallbackResult" hidden>
+    <p id="lyricFallbackSummary"></p>
+    <div class="fallback-actions">
+      <button class="file-btn" id="useLyricFallback" type="button">Usar versión sin VAD</button>
+      <button class="ghost" id="keepLyricOriginal" type="button">Usar versión con VAD</button>
+    </div>
+    <details id="lyricFallbackPreview" hidden>
+      <summary id="lyricFallbackPreviewTitle">Ver versión sin VAD</summary>
+      <pre id="lyricFallbackPreviewText"></pre>
+    </details>
+    <details id="lyricFallbackOriginalPreview" hidden>
+      <summary id="lyricFallbackOriginalPreviewTitle">Ver versión con VAD</summary>
+      <pre id="lyricFallbackOriginalPreviewText"></pre>
+    </details>
+  </div>
+</aside>
 <div id="recovery" hidden>
   <div class="recovery-actions">
     <button class="file-btn" id="retryAction" type="button">Reintentar</button>
@@ -435,7 +829,7 @@
       </div>
       <div class="welcome-step">
         <strong><span>2</span> Procesamos el audio</strong>
-        <p>La app prepara la letra; separar la voz puede mejorar el resultado y tarda más.</p>
+        <p>La app prepara la letra; separar la voz puede ayudar en algunas canciones y tarda más.</p>
       </div>
       <div class="welcome-step">
         <strong><span>3</span> Revisa y disfruta</strong>
@@ -523,10 +917,13 @@ async function initializeAuth() {
     authRequired = session.required === true;
     $("separate").checked = session.defaultSeparate === true;
     $("chordsOpt").checked = session.defaultChords === true;
-    $("quality").value = session.freeTier ? "tiny" : $("quality").value;
+    const availableModels = ["tiny", "base", "small", "medium"];
+    const defaultModel = availableModels.includes(session.defaultModel) ? session.defaultModel : "small";
+    $("quality").value = session.freeTier ? "tiny" : defaultModel;
     $("separate").disabled = session.freeTier === true;
     $("chordsOpt").disabled = session.freeTier === true;
     $("quality").disabled = session.freeTier === true;
+    $("separationLevel").disabled = !$("separate").checked || $("separate").disabled;
     if (session.freeTier) {
       $("freeNotice").textContent =
         `Modo gratuito de prueba: audios de hasta ${session.maxMinutes} minutos y ${session.maxUploadMb} MB. ` +
@@ -591,15 +988,23 @@ $("logoutBtn").addEventListener("click", async () => {
 void initializeAuth();
 
 let lines = [];          // [{start,end,text,words:[{word,start,end}]}]
+let analyzedSections = [];
 let lineEls = [];
 let wordEls = [];        // wordEls[i] = spans de la línea i (vacío en modo edición)
+let instrumentalEls = [];
+let instrumentalGaps = [];
 let activeIdx = -1;
+let activeInstrumentalIdx = -1;
 let pollTimer = null;
 let pollGeneration = 0;
 let editMode = false;
 let currentJobId = null; // trabajo principal (para re-transcribir)
+let activeProcessingJobId = null;
 let busy = false;
 let recoveryAction = null;
+let fallbackOriginalLines = null;
+let fallbackCandidateLines = null;
+let currentTranscriptionMode = "vad";
 let chords = [];         // [{start,end,chord}]
 let songKey = "";
 let transpose = 0, capo = 0;
@@ -617,15 +1022,22 @@ const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 const fmt = (t) => Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0");
 const r2 = (x) => Math.round(x * 100) / 100;
+const MIN_TRANSCRIPTION_WORDS_PER_MINUTE = 8;
 
 $("pick").onclick = () => $("file").click();
 $("welcomePick").onclick = () => $("file").click();
+$("separate").addEventListener("change", () => {
+  $("separationLevel").disabled = !$("separate").checked || $("separate").disabled;
+});
+$("separationLevel").disabled = !$("separate").checked;
 
 /* ------------------------------------------------------------ enviar trabajos */
 function buildJobForm(submission) {
   const form = new FormData();
   form.append(submission.type === "file" ? "file" : "url", submission.value);
   form.append("separate", submission.separate ? "true" : "false");
+  form.append("separation_level", submission.separationLevel);
+  form.append("transcription_mode", submission.transcriptionMode);
   form.append("chords", submission.chords ? "true" : "false");
   form.append("quality", submission.quality);
   return form;
@@ -640,6 +1052,7 @@ async function startJob(submission) {
   currentJobId = null;
   $("editBtn").disabled = true;
   clearLyrics();
+  currentTranscriptionMode = submission.transcriptionMode;
   player.pause();
   $("fileName").textContent = label || "";
   setStatus("Enviando…", 0);
@@ -648,6 +1061,7 @@ async function startJob(submission) {
     poll(job_id, (job) => {
       currentJobId = job_id;
       lines = job.result;
+      currentTranscriptionMode = job.transcription_mode || submission.transcriptionMode;
       chords = job.chords || [];
       songKey = job.key || "";
       transpose = 0; capo = 0; lyricShift = 0;
@@ -660,10 +1074,27 @@ async function startJob(submission) {
       document.body.classList.toggle("hasChords", chords.length > 0);
       updateChordBar();
       let msg = "Listo ✔ Dale play. Si algo salió mal, usa ✏️ Editar.";
+      if (currentTranscriptionMode === "no_vad") msg += " Modo de letra: sin VAD.";
+      if (currentTranscriptionMode === "compare") msg += " Compara las dos versiones y elige la que prefieras.";
       if (job.chords_error) msg += " (No se pudieron detectar los acordes: " + job.chords_error + ")";
       if (job.separate_error) msg += " (No se pudo separar la voz, se usó el audio original: " + job.separate_error + ")";
       setStatus(msg, 1);
       render();
+      if (currentTranscriptionMode === "compare") {
+        if (!Array.isArray(job.alternative_result)) {
+          setStatus(
+            "El servidor no devolvió la versión sin VAD. Se conserva la transcripción con VAD; " +
+            "reinicia Musiconvert y procesa la canción otra vez para comparar ambas versiones.",
+            0,
+            true,
+          );
+          return;
+        }
+        fallbackOriginalLines = copyTranscript(lines);
+        fallbackCandidateLines = copyTranscript(job.alternative_result);
+        showTranscriptComparison();
+      }
+      updateLyricFallback();
     }, true, () => startJob(submission));
   } catch (err) {
     busy = false;
@@ -685,13 +1116,37 @@ async function postJob(url, form) {
   return body.job_id;
 }
 
+$("cancelProcess").onclick = async () => {
+  if (!activeProcessingJobId || $("cancelProcess").disabled) return;
+  const jobId = activeProcessingJobId;
+  $("cancelProcess").disabled = true;
+  try {
+    const response = await apiFetch("/api/jobs/" + encodeURIComponent(jobId) + "/cancel", {
+      method: "POST",
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "No se pudo cancelar el proceso.");
+    if (result.accepted) {
+      setStatus("Cancelando… se detendrá al terminar el paso de audio que esté ejecutándose.", 0);
+      $("cancelProcess").textContent = "Cancelando…";
+    } else {
+      setStatus("El proceso ya había terminado.", 1);
+    }
+  } catch (error) {
+    $("cancelProcess").disabled = false;
+    showFailure(`No se pudo cancelar el proceso. ${error.message}`);
+  }
+};
+
 $("file").onchange = (e) => {
   const file = e.target.files[0];
   if (!file) return;
   player.src = URL.createObjectURL(file);
   startJob({
     type: "file", value: file, label: file.name,
-    separate: $("separate").checked, chords: $("chordsOpt").checked, quality: $("quality").value,
+    separate: $("separate").checked, transcriptionMode: $("transcriptionMode").value,
+    separationLevel: $("separationLevel").value,
+    chords: $("chordsOpt").checked, quality: $("quality").value,
   });
   e.target.value = "";
 };
@@ -702,7 +1157,9 @@ $("urlForm").onsubmit = (e) => {
   if (!link) return;
   startJob({
     type: "url", value: link, label: "YouTube",
-    separate: $("separate").checked, chords: $("chordsOpt").checked, quality: $("quality").value,
+    separate: $("separate").checked, transcriptionMode: $("transcriptionMode").value,
+    separationLevel: $("separationLevel").value,
+    chords: $("chordsOpt").checked, quality: $("quality").value,
   });
 };
 
@@ -711,16 +1168,33 @@ function canRetry(error) {
 }
 
 /* ------------------------------------------------------------------- polling */
-function poll(jobId, onDone, isMain, onRetry) {
+function poll(jobId, onDone, isMain, onRetry, onStop) {
   pollGeneration++;
   const generation = pollGeneration;
   clearTimeout(pollTimer);
   busy = true;
+  activeProcessingJobId = jobId;
+  $("processActions").hidden = false;
+  $("cancelProcess").hidden = false;
+  $("cancelProcess").disabled = false;
+  $("cancelProcess").textContent = "✕ Cancelar proceso";
   let audioLoaded = false;
   let connectionFailures = 0;
+  let stopped = false;
   const stop = () => {
+    if (stopped) return;
+    stopped = true;
     clearTimeout(pollTimer);
-    if (generation === pollGeneration) busy = false;
+    if (generation === pollGeneration) {
+      busy = false;
+      if (activeProcessingJobId === jobId) {
+        activeProcessingJobId = null;
+        $("processActions").hidden = true;
+        $("cancelProcess").disabled = false;
+        $("cancelProcess").textContent = "✕ Cancelar proceso";
+      }
+    }
+    if (onStop) onStop();
   };
 
   const check = async () => {
@@ -736,7 +1210,7 @@ function poll(jobId, onDone, isMain, onRetry) {
         throw error;
       }
       if (!job || typeof job.status !== "string") throw new Error("El servidor devolvió un estado de trabajo no válido.");
-      if (!["queued", "downloading", "separating", "loading_model", "transcribing", "chords", "error", "done"].includes(job.status)) {
+      if (!["queued", "downloading", "separating", "loading_model", "transcribing", "transcribing_alternative", "chords", "cancelling", "cancelled", "error", "done"].includes(job.status)) {
         throw new Error(`El servidor devolvió una etapa desconocida: ${job.status}.`);
       }
     } catch (err) {
@@ -749,7 +1223,7 @@ function poll(jobId, onDone, isMain, onRetry) {
       }
       stop();
       showFailure(`No se pudo consultar el progreso. ${err.message}`, canRetry(err)
-        ? () => poll(jobId, onDone, isMain, onRetry)
+        ? () => poll(jobId, onDone, isMain, onRetry, onStop)
         : null);
       return;
     }
@@ -766,6 +1240,11 @@ function poll(jobId, onDone, isMain, onRetry) {
       stop();
       return showFailure(`No se pudo procesar la canción. ${job.error || "Ocurrió un error inesperado."}`, onRetry);
     }
+    if (job.status === "cancelled") {
+      stop();
+      if (!lines.length) lyricsEl.innerHTML = '<div class="empty">Proceso cancelado. Puedes volver a elegir la canción para intentarlo de nuevo.</div>';
+      return setStatus("Proceso cancelado.", 0);
+    }
     if (job.status === "done") {
       stop();
       if (!Array.isArray(job.result)) {
@@ -780,8 +1259,10 @@ function poll(jobId, onDone, isMain, onRetry) {
       downloading: "Descargando audio de YouTube…" + pct,
       separating: "Separando la voz (puede tardar varios minutos)…" + pct,
       loading_model: "Cargando modelo (la primera vez descarga ~500 MB)…",
-      transcribing: "Transcribiendo…" + pct,
+      transcribing: (isMain ? "Transcribiendo…" : "Segunda pasada sin VAD: transcribiendo…") + pct,
+      transcribing_alternative: "Transcribiendo la alternativa sin VAD…" + pct,
       chords: "Detectando acordes…",
+      cancelling: "Cancelando proceso…",
     };
     setStatus(labels[job.status] || "Procesando canción…", job.progress);
     pollTimer = setTimeout(check, 1500);
@@ -823,30 +1304,147 @@ $("chooseAnother").onclick = () => {
 function clearLyrics() {
   lyricsEl.classList.remove("welcome-mode");
   lines = []; lineEls = []; wordEls = []; activeIdx = -1;
+  instrumentalEls = []; instrumentalGaps = []; activeInstrumentalIdx = -1;
+  fallbackOriginalLines = null;
+  fallbackCandidateLines = null;
+  $("lyricFallback").hidden = true;
+  $("lyricFallbackStart").hidden = false;
+  $("lyricFallbackStart").disabled = false;
+  $("lyricFallbackStart").textContent = "▶ Iniciar segunda pasada sin VAD";
+  $("lyricFallbackResult").hidden = true;
+  $("lyricFallbackPreview").hidden = true;
+  $("lyricFallbackOriginalPreview").hidden = true;
+  $("lyricFallbackTitle").textContent = "";
+  $("lyricFallbackHint").textContent =
+    "Se conserva la versión actual. La segunda pasada desactiva VAD, pero mantiene el rechazo de segmentos con alta probabilidad de silencio. " +
+    "Usa la voz separada si está disponible, puede tardar varios minutos y aun así confundir música con palabras.";
+  $("useLyricFallback").textContent = "Usar versión sin VAD";
+  $("keepLyricOriginal").textContent = "Volver a la versión inicial";
+  $("useLyricFallback").disabled = true;
   lyricShift = 0; $("syVal").textContent = "0.0 s";
   chords = []; songKey = ""; baseBpm = 0; baseBeats = []; shownBeats = [];
+  updateChordBar();
   document.body.classList.remove("hasChords", "hasLyrics", "hasTempo");
   lyricsEl.innerHTML = '<div class="empty">Generando letra…</div>';
 }
 
+function countTranscriptWords(transcript) {
+  return transcript.reduce((count, line) => count + line.words.length, 0);
+}
+
+function copyTranscript(transcript) {
+  return transcript.map((line) => ({
+    ...line,
+    words: line.words.map((word) => ({ ...word })),
+  }));
+}
+
+function updateLyricFallback() {
+  if (currentTranscriptionMode === "compare" && fallbackCandidateLines) {
+    $("lyricFallback").hidden = false;
+    return;
+  }
+  if (currentTranscriptionMode !== "vad") {
+    $("lyricFallback").hidden = true;
+    return;
+  }
+  const duration = player.duration;
+  const count = countTranscriptWords(lines);
+  const rate = Number.isFinite(duration) && duration > 0 ? count * 60 / duration : Infinity;
+  const isSparse = duration >= 60 && rate < MIN_TRANSCRIPTION_WORDS_PER_MINUTE;
+  const lastLyricEnd = lines.reduce((latest, line) => Math.max(latest, toAudio(line.end)), 0);
+  const missingTail = duration >= 60 && lines.length > 0 &&
+    duration - lastLyricEnd > Math.max(12, duration * 0.08);
+  if (!isSparse && !missingTail) {
+    $("lyricFallback").hidden = true;
+    return;
+  }
+  $("lyricFallback").hidden = false;
+  if (fallbackCandidateLines) return;
+  $("lyricFallbackTitle").textContent = isSparse
+    ? `La primera pasada encontró ${count} ${count === 1 ? "palabra" : "palabras"} ` +
+      `(${rate.toFixed(1)} por minuto). Si la canción tiene más letra, prueba una segunda pasada.`
+    : `La letra detectada termina en ${fmt(lastLyricEnd)}, aunque el audio dura ${fmt(duration)}. ` +
+      "Si faltan versos al final, prueba una segunda pasada.";
+  $("lyricFallbackStart").hidden = false;
+  $("lyricFallbackResult").hidden = true;
+}
+
+function showTranscriptComparison() {
+  if (!fallbackOriginalLines || !fallbackCandidateLines) return;
+  const originalCount = countTranscriptWords(fallbackOriginalLines);
+  const candidateCount = countTranscriptWords(fallbackCandidateLines);
+  $("lyricFallback").hidden = false;
+  $("lyricFallbackTitle").textContent = "Compara las dos transcripciones";
+  $("lyricFallbackHint").textContent =
+    "La versión con VAD se muestra primero. La alternativa se transcribió sin VAD sobre la misma fuente de audio. " +
+    "No se mezclan automáticamente: revisa ambas y elige una. Sin VAD puede detectar palabras de más.";
+  $("lyricFallbackStart").hidden = true;
+  $("lyricFallbackResult").hidden = false;
+  $("lyricFallbackSummary").textContent =
+    `Con VAD: ${originalCount} palabras. Sin VAD: ${candidateCount} palabras. ` +
+    "La cantidad no indica por sí sola cuál es más correcta.";
+  $("lyricFallbackPreviewTitle").textContent = "Ver versión sin VAD";
+  $("lyricFallbackPreviewText").textContent =
+    fallbackCandidateLines.map((line) => line.text).join("\n");
+  $("lyricFallbackPreview").hidden = false;
+  $("lyricFallbackOriginalPreviewTitle").textContent = "Ver versión con VAD";
+  $("lyricFallbackOriginalPreviewText").textContent =
+    fallbackOriginalLines.map((line) => line.text).join("\n");
+  $("lyricFallbackOriginalPreview").hidden = false;
+  $("useLyricFallback").textContent = "Usar versión sin VAD";
+  $("useLyricFallback").disabled = candidateCount === 0;
+  $("keepLyricOriginal").textContent = "Usar versión con VAD";
+}
+
+player.addEventListener("loadedmetadata", updateLyricFallback);
+player.addEventListener("durationchange", updateLyricFallback);
+player.addEventListener("durationchange", () => { if (chords.length) render(); });
+
 /* ----------------------------------------------------------------- dibujado */
 function render() {
   lyricsEl.innerHTML = "";
-  lineEls = []; wordEls = []; activeIdx = -1;
-  if (!lines.length) {
+  lineEls = []; wordEls = []; instrumentalEls = []; instrumentalGaps = [];
+  activeIdx = -1; activeInstrumentalIdx = -1;
+  analyzedSections = sectionStarts();
+  const showChords = chords.length && $("showCh").checked && !editMode;
+  if (!lines.length && !showChords) {
     lyricsEl.innerHTML = '<div class="empty">No hay letra. ' +
       (editMode ? "Usa “＋ Línea en el tiempo actual”." : "No se detectó letra en este audio.") + "</div>";
     return;
   }
-  lines.forEach((ln, i) => (editMode ? buildEditRow(ln, i) : buildLine(ln, i)));
+  if (showChords) instrumentalGaps = voiceFreeGaps();
+  const rows = [
+    ...lines.map((line, index) => ({ type: "lyric", start: toAudio(line.start), index })),
+    ...instrumentalGaps.map((gap, index) => ({ type: "instrumental", start: gap.start, index })),
+  ].sort((a, b) => a.start - b.start);
+  rows.forEach((row) => {
+    if (row.type === "instrumental") buildInstrumentalRow(instrumentalGaps[row.index]);
+    else if (editMode) buildEditRow(lines[row.index], row.index);
+    else buildLine(lines[row.index], row.index);
+  });
+  if (!lines.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No se detectó letra en este audio.";
+    lyricsEl.appendChild(empty);
+  }
 }
 
 // Nombre de acorde desplazado `semis` semitonos (ej. "Am" → "Cm" con +3).
 function shiftChord(name, semis) {
-  const m = /^([A-G]#?)(m?)$/.exec(name);
+  const m = /^([A-G]#?)(maj7|m7|7|m?)$/.exec(name);
   if (!m) return name;
   const i = (((NOTES.indexOf(m[1]) + semis) % 12) + 12) % 12;
   return NOTES[i] + m[2];
+}
+const SOLFEGE_NOTES = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
+function displayChord(name, semis = 0) {
+  const shifted = shiftChord(name, semis);
+  if ($("chordNotation").value !== "solfege") return shifted;
+  const match = /^([A-G]#?)(.*)$/.exec(shifted);
+  const noteIndex = match ? NOTES.indexOf(match[1]) : -1;
+  return noteIndex >= 0 ? SOLFEGE_NOTES[noteIndex] + match[2] : shifted;
 }
 const shapeShift = () => transpose - capo;   // lo que se muestra son las formas que tocas con capo
 
@@ -863,7 +1461,7 @@ function chordsForLine(i) {
   if (!ln.words.length) return out;
   const first = toAudio(ln.words[0].start), last = toAudio(ln.end);   // acordes están en tiempo de audio
   const active = chordAt(first + 0.05);
-  if (active && first - active.end < 4) out[0] = [active];
+  if (active && active.end >= first - 0.25) out[0] = [active];
   for (const c of chords) {
     if (c.start <= first + 0.05 || c.start >= last) continue;
     let k = ln.words.findIndex((w) => toAudio(w.end) > c.start);
@@ -873,6 +1471,170 @@ function chordsForLine(i) {
     (out[k] ||= []).push(c);
   }
   return out;
+}
+
+function voiceFreeGaps() {
+  const duration = Number.isFinite(player.duration) && player.duration > 0
+    ? player.duration
+    : chords[chords.length - 1]?.end || 0;
+  if (!duration) return [];
+  const spoken = lines.map((line) => ({
+    start: Math.max(0, toAudio(line.start)),
+    end: Math.min(duration, toAudio(line.end)),
+  })).filter((span) => span.end > span.start).sort((a, b) => a.start - b.start);
+  const gaps = [];
+  let cursor = 0;
+  for (const span of spoken) {
+    if (span.start > cursor) gaps.push({ start: cursor, end: span.start });
+    cursor = Math.max(cursor, span.end);
+  }
+  if (duration > cursor) gaps.push({ start: cursor, end: duration });
+  return gaps.filter((gap) => {
+    const edge = gap.start === 0 || gap.end === duration;
+    return gap.end - gap.start >= (edge ? 0.2 : 0.45) &&
+      chords.some((chord) => chord.start < gap.end && chord.end > gap.start);
+  });
+}
+
+const SECTION_GAP_SECONDS = 2.5;
+function normalizedSectionLine(line) {
+  return line.words
+    .map((word) => norm(word.word).replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function repeatedLyricBlocks(lyricLines) {
+  const normalized = lyricLines.map(({ line }) => normalizedSectionLine(line));
+  const candidates = new Map();
+  for (let first = 0; first < normalized.length; first++) {
+    if (!normalized[first]) continue;
+    for (let second = first + 1; second < normalized.length; second++) {
+      if (normalized[first] !== normalized[second]) continue;
+      let length = 1;
+      while (
+        first + length < normalized.length &&
+        second + length < normalized.length &&
+        normalized[first + length] &&
+        normalized[first + length] === normalized[second + length]
+      ) length++;
+      if (length < 2) continue;
+      const key = normalized.slice(first, first + length).join("\n");
+      if (!candidates.has(key)) candidates.set(key, { key, length });
+    }
+  }
+
+  const selected = [];
+  const ranges = [];
+  let chorusNumber = 0;
+  [...candidates.values()].sort((a, b) => b.length - a.length).forEach((candidate) => {
+    const blockLines = candidate.key.split("\n");
+    const wordCount = blockLines.reduce((sum, text) => sum + text.split(" ").length, 0);
+    const starts = [];
+    for (let index = 0; index <= normalized.length - candidate.length; index++) {
+      if (normalized.slice(index, index + candidate.length).join("\n") === candidate.key) starts.push(index);
+    }
+    const nonOverlapping = starts.filter((start, index) =>
+      !starts.slice(0, index).some((previous) => start < previous + candidate.length));
+    if (nonOverlapping.length < 2) return;
+    const free = nonOverlapping.filter((start) =>
+      !ranges.some((range) => start < range.end && start + candidate.length > range.start));
+    if (free.length < 2) return;
+
+    if (wordCount < 8) {
+      if (wordCount < 6) return;
+      const chordSignatures = (start) => blockLines.flatMap((_, offset) => {
+        const map = chordsForLine(lyricLines[start + offset].index);
+        return Object.keys(map).sort((a, b) => Number(a) - Number(b))
+          .flatMap((wordIndex) => map[wordIndex].map((chord) => chord.chord));
+      });
+      const signatures = free.map(chordSignatures);
+      const chordsRepeat = signatures.some((signature, index) =>
+        signature.length > 0 && signatures.slice(index + 1).some((other) =>
+          JSON.stringify(other) === JSON.stringify(signature)));
+      if (!chordsRepeat) return;
+    }
+
+    chorusNumber++;
+    free.forEach((start) => {
+      const from = lyricLines[start].index;
+      selected.push({
+        index: from,
+        start: toAudio(lyricLines[start].line.start),
+        label: `Coro ${chorusNumber}`,
+      });
+      ranges.push({ start, end: start + candidate.length });
+    });
+  });
+  return { starts: selected, ranges };
+}
+
+function sectionStarts() {
+  const lyricLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.words.length > 0);
+  if (!lyricLines.length) return [];
+  const choruses = repeatedLyricBlocks(lyricLines);
+  const starts = new Map();
+  let number = 0;
+  lyricLines.forEach(({ line, index }, position) => {
+    const previous = position > 0 ? lyricLines[position - 1].line : null;
+    const gap = previous ? toAudio(line.start) - toAudio(previous.end) : Infinity;
+    const insideChorus = choruses.ranges.some((range) => position > range.start && position < range.end);
+    if (gap < SECTION_GAP_SECONDS || insideChorus) return;
+    number++;
+    starts.set(index, { index, start: toAudio(line.start), label: `Sección ${number}` });
+  });
+  choruses.starts.forEach((section) => starts.set(section.index, section));
+  return [...starts.values()].sort((a, b) => a.start - b.start);
+}
+
+function instrumentalDetails(gap) {
+  const duration = Number.isFinite(player.duration) && player.duration > 0
+    ? player.duration
+    : chords[chords.length - 1]?.end || gap.end;
+  const startsSong = gap.start === 0;
+  const endsSong = gap.end >= duration - 0.1;
+  const label = startsSong && endsSong ? "Instrumental"
+    : startsSong ? "Intro instrumental"
+      : endsSong ? "Final instrumental" : "Pausa instrumental";
+  return {
+    label,
+    chords: chords.filter((chord) => chord.start < gap.end && chord.end > gap.start),
+  };
+}
+
+function buildChordButton(seg) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "cs" + (isLow(seg) ? " low" : "");
+  button.textContent = displayChord(seg.chord, shapeShift());
+  button.title = isLow(seg) ? "Acorde dudoso: clic para corregir" : "Clic para cambiar el acorde";
+  button.setAttribute("aria-label", `${displayChord(seg.chord, shapeShift())}${isLow(seg) ? ", acorde dudoso" : ""}. Editar acorde`);
+  button.onclick = (event) => { event.stopPropagation(); openChordMenu(seg, button); };
+  return button;
+}
+
+function buildInstrumentalRow(gap) {
+  const details = instrumentalDetails(gap);
+  const segments = details.chords;
+  if (!segments.length) return;
+  const div = document.createElement("div");
+  div.className = "line instrumental";
+  const time = document.createElement("span");
+  time.className = "instrumental-label";
+  time.textContent = `${details.label} · ${fmt(gap.start)}`;
+  div.appendChild(time);
+  const chordList = document.createElement("span");
+  chordList.className = "instrumental-chords";
+  segments.forEach((segment) => chordList.appendChild(buildChordButton(segment)));
+  div.appendChild(chordList);
+  div.onclick = () => {
+    player.currentTime = gap.start;
+    player.play();
+  };
+  lyricsEl.appendChild(div);
+  instrumentalEls.push(div);
 }
 
 function buildLine(ln, i) {
@@ -899,15 +1661,8 @@ function buildLine(ln, i) {
       const c = document.createElement("span");
       c.className = "ch";
       map[k].forEach((seg, q) => {
-        const cs = document.createElement("button");
-        cs.type = "button";
-        cs.className = "cs" + (isLow(seg) ? " low" : "");
-        cs.textContent = shiftChord(seg.chord, shapeShift());
-        cs.title = isLow(seg) ? "Acorde dudoso: clic para corregir" : "Clic para cambiar el acorde";
-        cs.setAttribute("aria-label", `${shiftChord(seg.chord, shapeShift())}${isLow(seg) ? ", acorde dudoso" : ""}. Editar acorde`);
-        cs.onclick = (e) => { e.stopPropagation(); openChordMenu(seg, cs); };
         if (q) c.append(" ");
-        c.appendChild(cs);
+        c.appendChild(buildChordButton(seg));
       });
       wrap.appendChild(c);
     }
@@ -1076,6 +1831,84 @@ async function startRetranscribe(parentJobId, t) {
   }
 }
 
+async function startLyricFallback() {
+  if (!currentJobId) {
+    setStatus("No se encontró el trabajo original. Vuelve a cargar la canción para iniciar otra pasada.", 0, true);
+    return;
+  }
+  if (busy) {
+    setStatus("Espera a que termine el proceso actual antes de iniciar otra pasada.", 0);
+    return;
+  }
+  const parentJobId = currentJobId;
+  const form = new FormData();
+  form.append("start", "0");
+  player.pause();
+  busy = true;
+  $("lyricFallbackStart").disabled = true;
+  $("lyricFallbackStart").textContent = "Solicitando segunda pasada…";
+  try {
+    setStatus("Solicitando segunda pasada sin filtro de silencios (VAD)…", 0);
+    const id = await postJob("/api/jobs/" + encodeURIComponent(parentJobId) + "/retranscribe", form);
+    poll(id, (job) => {
+      fallbackOriginalLines = copyTranscript(lines);
+      fallbackCandidateLines = copyTranscript(job.result);
+      const originalCount = countTranscriptWords(fallbackOriginalLines);
+      const candidateCount = countTranscriptWords(fallbackCandidateLines);
+      $("lyricFallbackStart").hidden = candidateCount > 0;
+      if (!candidateCount) $("lyricFallbackStart").textContent = "↻ Intentar segunda pasada otra vez";
+      $("lyricFallbackResult").hidden = false;
+      $("lyricFallbackPreview").hidden = false;
+      $("lyricFallbackOriginalPreview").hidden = true;
+      $("lyricFallbackTitle").textContent = "Prueba una transcripción alternativa";
+      $("lyricFallbackHint").textContent =
+        "Se conserva la versión actual. Esta pasada desactiva VAD, pero mantiene el rechazo de segmentos con alta probabilidad de silencio. " +
+        "Puede tardar varios minutos y confundir música con palabras.";
+      $("lyricFallbackPreviewTitle").textContent = "Ver texto alternativo sin VAD";
+      $("lyricFallbackPreviewText").textContent =
+        fallbackCandidateLines.map((line) => line.text).join("\n");
+      $("useLyricFallback").disabled = candidateCount === 0;
+      $("lyricFallbackSummary").textContent = candidateCount
+        ? `La alternativa tiene ${candidateCount} palabras; la versión inicial tiene ${originalCount}. ` +
+          "Revísala antes de elegir: sin VAD pueden aparecer palabras incorrectas en pausas o partes instrumentales."
+        : "La segunda pasada no encontró palabras; se conserva la versión inicial.";
+      setStatus(candidateCount
+        ? "La segunda transcripción está lista; no se aplicó automáticamente."
+        : "La segunda pasada terminó sin palabras; se conserva la versión inicial.", 1, candidateCount === 0);
+    }, false, () => startLyricFallback(), () => {
+      if (!$("lyricFallbackStart").hidden) {
+        $("lyricFallbackStart").disabled = false;
+        $("lyricFallbackStart").textContent = "↻ Intentar segunda pasada otra vez";
+      }
+    });
+  } catch (err) {
+    busy = false;
+    $("lyricFallbackStart").disabled = false;
+    $("lyricFallbackStart").textContent = "↻ Intentar segunda pasada otra vez";
+    showFailure(`No se pudo probar la segunda transcripción. ${err.message}`, canRetry(err)
+      ? () => startLyricFallback()
+      : null);
+  }
+}
+
+$("lyricFallbackStart").onclick = () => startLyricFallback();
+$("useLyricFallback").onclick = () => {
+  if (!fallbackCandidateLines) return;
+  lines = copyTranscript(fallbackCandidateLines);
+  render();
+  setStatus(currentTranscriptionMode === "compare"
+    ? "Se eligió la versión sin VAD. Revísala por si incluye palabras incorrectas."
+    : "Se aplicó la segunda transcripción. Revísala por si incluye palabras incorrectas.", 1);
+};
+$("keepLyricOriginal").onclick = () => {
+  if (!fallbackOriginalLines) return;
+  lines = copyTranscript(fallbackOriginalLines);
+  render();
+  setStatus(currentTranscriptionMode === "compare"
+    ? "Se eligió la versión con VAD."
+    : "Se restauró la transcripción inicial.", 1);
+};
+
 // Vuelve a transcribir desde el tiempo actual hasta el final, sin filtro de silencios.
 $("retryBtn").onclick = () => {
   if (!currentJobId || busy) return;
@@ -1096,11 +1929,12 @@ for (let n = 0; n <= 9; n++) {
 }
 
 function updateChordBar() {
-  $("keyTxt").textContent = songKey ? shiftChord(songKey, transpose) : "–";
+  $("noChordsHint").hidden = chords.length > 0;
+  $("keyTxt").textContent = songKey ? displayChord(songKey, transpose) : "–";
   $("trVal").textContent = (transpose > 0 ? "+" : "") + transpose;
   capoSel.value = String(capo);
   $("shapeTxt").textContent = songKey && capo
-    ? "Tocas formas en " + shiftChord(songKey, transpose - capo) + " con capo en el traste " + capo
+    ? "Tocas formas en " + displayChord(songKey, transpose - capo) + " con capo en el traste " + capo
     : "";
   document.body.classList.toggle("showCh", $("showCh").checked);
 }
@@ -1109,37 +1943,52 @@ $("trUp").onclick = () => { transpose = Math.min(transpose + 1, 11); chordsChang
 $("trDown").onclick = () => { transpose = Math.max(transpose - 1, -11); chordsChanged(); };
 capoSel.onchange = () => { capo = +capoSel.value; chordsChanged(); };
 $("showCh").onchange = chordsChanged;
+$("chordNotation").onchange = chordsChanged;
 
 /* ---------------------------------------- corregir acordes con un clic */
 const LOW = 0.3;                                    // confianza mínima para no marcar el acorde como dudoso
 const isLow = (seg) => !seg.fixed && (seg.conf ?? 1) < LOW;
-const ALL = [...NOTES, ...NOTES.map((n) => n + "m")];
+const ALL = [
+  ...NOTES,
+  ...NOTES.map((n) => n + "m"),
+  ...NOTES.map((n) => n + "7"),
+  ...NOTES.map((n) => n + "maj7"),
+  ...NOTES.map((n) => n + "m7"),
+];
 let menuSeg = null;
+let menuChordStart = null;
 const menuEl = $("chordMenu");
 let menuAnchor = null;
 
 function closeMenu(restoreFocus = false) {
   menuEl.classList.remove("on");
   menuSeg = null;
+  menuChordStart = null;
   if (restoreFocus && menuAnchor && menuAnchor.isConnected) menuAnchor.focus();
   menuAnchor = null;
 }
 
 function openChordMenu(seg, anchor) {
   menuSeg = seg;
+  menuChordStart = seg ? null : r2(Math.max(0, player.currentTime));
   menuAnchor = anchor;
-  const shown = shiftChord(seg.chord, shapeShift());
-  $("cmTitle").textContent = "Acorde: " + shown + (isLow(seg) ? " (dudoso)" : "");
+  const adding = !seg;
+  const shown = seg ? displayChord(seg.chord, shapeShift()) : "";
+  $("cmTitle").textContent = adding
+    ? `Agregar acorde en ${fmt(menuChordStart)}`
+    : "Acorde: " + shown + (isLow(seg) ? " (dudoso)" : "");
   const alts = $("cmAlts");
   alts.innerHTML = "";
-  (seg.alts || []).slice(0, 3).forEach((a) =>
-    alts.appendChild(mkBtn(shiftChord(a, shapeShift()), "Cambiar a este acorde", () => applyChord(a))));
+  alts.hidden = adding;
+  (seg?.alts || []).slice(0, 3).forEach((a) =>
+    alts.appendChild(mkBtn(displayChord(a, shapeShift()), "Cambiar a este acorde", () => applyChord(a))));
   const sel = $("cmSel");
-  sel.innerHTML = '<option value="">Otro acorde…</option>' +
-    ALL.map((a) => `<option value="${a}">${shiftChord(a, shapeShift())}</option>`).join("") +
-    '<option value="N">(quitar este acorde)</option>';
+  sel.innerHTML = (adding ? '<option value="">Selecciona un acorde…</option>' : '<option value="">Otro acorde…</option>') +
+    ALL.map((a) => `<option value="${a}">${displayChord(a, shapeShift())}</option>`).join("") +
+    (adding ? "" : '<option value="N">🗑 Quitar este acorde</option>');
   sel.onchange = () => { if (sel.value) applyChord(sel.value); };
   $("cmAll").checked = false;
+  $("cmAll").parentElement.hidden = adding;
   $("cmAllTxt").textContent = "Cambiar todos los " + shown + " de la canción";
   const r = anchor.getBoundingClientRect();
   menuEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 260)) + "px";
@@ -1149,6 +1998,15 @@ function openChordMenu(seg, anchor) {
 }
 
 function applyChord(newChord) {
+  if (menuChordStart !== null) {
+    const start = menuChordStart;
+    addChordAt(start, newChord);
+    closeMenu();
+    updateChordBar();
+    render();
+    setStatus(`Se agregó ${displayChord(newChord, shapeShift())} en ${fmt(start)}.`, 1);
+    return;
+  }
   if (!menuSeg) return;
   const targets = $("cmAll").checked ? chords.filter((c) => c.chord === menuSeg.chord) : [menuSeg];
   if (newChord === "N") chords = chords.filter((c) => !targets.includes(c));
@@ -1156,6 +2014,34 @@ function applyChord(newChord) {
   closeMenu();
   render();
 }
+
+function addChordAt(at, name) {
+  const endOfSong = Number.isFinite(player.duration) && player.duration > 0
+    ? player.duration
+    : chords.reduce((latest, chord) => Math.max(latest, chord.end), 0);
+  const start = Math.min(Math.max(at, 0), endOfSong || at);
+  const containing = chords.find((chord) => chord.start <= start && chord.end > start);
+  let end;
+  if (containing) {
+    end = containing.end;
+    if (start > containing.start) {
+      chords.push({ ...containing, end: start });
+    }
+    chords = chords.filter((chord) => chord !== containing);
+  } else {
+    const next = chords.find((chord) => chord.start > start);
+    const beatDuration = baseBpm > 0 ? 60 / baseBpm : 1;
+    end = next?.start ?? (endOfSong > start ? endOfSong : start + beatDuration);
+  }
+  if (end <= start) end = start + (baseBpm > 0 ? 60 / baseBpm : 1);
+  chords.push({ start: r2(start), end: r2(end), chord: name, conf: 1, alts: [], fixed: true });
+  chords.sort((a, b) => a.start - b.start);
+}
+
+$("addChordBtn").onclick = (event) => {
+  event.stopPropagation();
+  openChordMenu(null, event.currentTarget);
+};
 
 function setChord(seg, name) {
   seg.alts = [seg.chord, ...(seg.alts || []).filter((a) => a !== name && a !== seg.chord)].slice(0, 3);
@@ -1171,15 +2057,18 @@ document.addEventListener("click", (e) => { if (!menuEl.contains(e.target)) clos
 /* ----------------------------------------- medir acierto con acordes reales */
 const QUAL_RE = /^(?:m(?!aj)|min|maj|M|dim|aug|sus[24]?|add\d+|\d+|[b#]\d+|[+°ø-]|\(.*?\))*$/;
 
-// "Bbm7" -> "A#m", "C/G" -> "C", "Cmaj7" -> "C". Devuelve null si no parece un acorde.
+// Normaliza sostenidos/bemoles y conserva las séptimas que reconoce la app.
 function parseChord(tok) {
   tok = tok.replace(/[()\[\]]/g, "").split("/")[0];
   const m = /^([A-G])([#b♯♭]?)(.*)$/.exec(tok);
   if (!m || !QUAL_RE.test(m[3])) return null;
   let i = NOTES.indexOf(m[1]);
   if (m[2] === "#" || m[2] === "♯") i++; else if (m[2]) i--;
-  const minor = /^(m(?!aj)|min|dim|-)/.test(m[3]);
-  return NOTES[(i + 12) % 12] + (minor ? "m" : "");
+  const quality = /^(?:maj7|M7)$/.test(m[3]) ? "maj7"
+    : /^(?:m7|min7)$/.test(m[3]) ? "m7"
+      : m[3] === "7" ? "7"
+        : /^(m(?!aj)|min|dim|-)/.test(m[3]) ? "m" : "";
+  return NOTES[(i + 12) % 12] + quality;
 }
 
 function detectedGroups() {              // acordes detectados, juntando los repetidos seguidos
@@ -1234,7 +2123,8 @@ $("measureGo").onclick = () => {
     `${subs.length} distintos · ${missing} no detectados · ${extra} de más`;
   if (subs.length) {
     html += "<table><tr><th>Real</th><th>Detectado</th></tr>" +
-      subs.slice(0, 12).map((o) => `<tr><td>${tru[o.tru]}</td><td>${groups[o.det].name}</td></tr>`).join("") +
+    subs.slice(0, 12).map((o) =>
+      `<tr><td>${displayChord(tru[o.tru])}</td><td>${displayChord(groups[o.det].name)}</td></tr>`).join("") +
       "</table>" + (subs.length > 12 ? `<div class="hint">…y ${subs.length - 12} más</div>` : "");
   }
   out.innerHTML = html;
@@ -1259,12 +2149,29 @@ $("measureFix").onclick = () => {
 /* ------------------------------------------------ copiar hoja de acordes */
 $("sheetBtn").onclick = async () => {
   const out = [];
-  lines.forEach((ln, i) => {
-    const map = chordsForLine(i);
+  const events = [
+    ...analyzedSections.map((section) => ({ ...section, type: "section", order: 1 })),
+    ...lines.map((line, index) => ({ line, index, type: "lyric", start: toAudio(line.start), order: 2 })),
+    ...voiceFreeGaps().map((gap) => ({ gap, type: "instrumental", start: gap.start, order: 0 })),
+  ].sort((a, b) => a.start - b.start || a.order - b.order);
+  events.forEach((event) => {
+    if (event.type === "section") {
+      out.push("", event.label);
+      return;
+    }
+    if (event.type === "instrumental") {
+      const details = instrumentalDetails(event.gap);
+      if (!details.chords.length) return;
+      out.push("");
+      out.push(details.chords.map((chord) => displayChord(chord.chord, shapeShift())).join("  "));
+      return;
+    }
+    const ln = event.line;
+    const map = chordsForLine(event.index);
     let chordLine = "", textLine = "";
     ln.words.forEach((w, k) => {
       if (map[k]) {
-        const label = map[k].map((sg) => shiftChord(sg.chord, shapeShift())).join(" ");
+        const label = map[k].map((sg) => displayChord(sg.chord, shapeShift())).join(" ");
         while (chordLine.length < textLine.length) chordLine += " ";
         if (chordLine && !chordLine.endsWith(" ")) chordLine += " ";
         chordLine += label;
@@ -1368,84 +2275,225 @@ $("lyricsFix").onclick = () => {
 };
 
 /* ------------------------------------------- descargar como imagen / PDF */
-const SH = { W: 1240, H: 1754, M: 110, LYR: 34, CH: 30, LH: 46, CHH: 40, GAP: 26 };
+const SH = { W: 1240, H: 1754, M: 76, MAX_FONT: 52 };
 
-function sheetRows(ctx) {
+function sheetRows(ctx, fontSize, compact = false) {
+  const chordSize = Math.max(10, Math.round(fontSize * 0.78));
+  const lineHeight = Math.ceil(fontSize * 1.28);
+  const chordHeight = Math.ceil(chordSize * 1.2);
+  const paragraphGap = fontSize < 8 ? 0 : Math.floor(fontSize * 0.35);
   const rows = [], maxW = SH.W - 2 * SH.M, showCh = chords.length && $("showCh").checked;
-  lines.forEach((ln, i) => {
-    const map = showCh ? chordsForLine(i) : {};
-    let row = [], x = 0;
+  const events = [
+    ...analyzedSections.map((section) => ({ ...section, type: "section", order: 1 })),
+    ...lines.map((line, index) => ({ line, index, type: "lyric", start: toAudio(line.start), order: 2 })),
+    ...voiceFreeGaps().map((gap) => ({ gap, type: "instrumental", start: gap.start, order: 0 })),
+  ].sort((a, b) => a.start - b.start || a.order - b.order);
+  let row = [], x = 0;
+  const flushLyrics = (end = true) => {
+    if (!row.length) return;
+    rows.push({ type: "lyrics", items: row, end });
+    row = [];
+    x = 0;
+  };
+
+  events.forEach((event) => {
+    if (event.type === "section") {
+      flushLyrics();
+      const size = Math.max(4, Math.round(fontSize * 0.68));
+      const gap = paragraphGap;
+      rows.push({ type: "section", label: event.label, end: true, gap, h: size + Math.ceil(size * 0.1) + gap });
+      return;
+    }
+
+    if (event.type === "instrumental") {
+      flushLyrics();
+      if (!showCh) return;
+      const details = instrumentalDetails(event.gap);
+      if (!details.chords.length) return;
+      const size = Math.max(4, Math.round(fontSize * 0.75));
+      const chordLines = [];
+      let chordLine = [], chordLineWidth = 0;
+      ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
+      details.chords.forEach((chord) => {
+        const label = displayChord(chord.chord, shapeShift());
+        const width = ctx.measureText(label).width;
+        const space = chordLine.length ? ctx.measureText("  ").width : 0;
+        if (chordLine.length && chordLineWidth + space + width > maxW) {
+          chordLines.push(chordLine.join("  "));
+          chordLine = [];
+          chordLineWidth = 0;
+        }
+        chordLineWidth += (chordLine.length ? ctx.measureText("  ").width : 0) + width;
+        chordLine.push(label);
+      });
+      if (chordLine.length) chordLines.push(chordLine.join("  "));
+      const gap = paragraphGap;
+      const chordHeight = chordLines.length * (size + Math.ceil(size * 0.3));
+      rows.push({
+        type: "instrumental",
+        chordLines,
+        chordSize: size,
+        end: true,
+        gap,
+        h: chordHeight + gap,
+      });
+      return;
+    }
+
+    const ln = event.line;
+    const map = showCh ? chordsForLine(event.index) : {};
+    if (!compact) flushLyrics();
     ln.words.forEach((w, k) => {
-      const label = map[k] ? map[k].map((sg) => shiftChord(sg.chord, shapeShift())).join(" ") : "";
-      ctx.font = `${SH.LYR}px Arial, Helvetica, sans-serif`;
+      const label = map[k] ? map[k].map((sg) => displayChord(sg.chord, shapeShift())).join(" ") : "";
+      ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
       const ww = ctx.measureText(w.word + " ").width;
-      ctx.font = `bold ${SH.CH}px Arial, Helvetica, sans-serif`;
-      const cw = label ? ctx.measureText(label + "  ").width : 0;
+      ctx.font = `bold ${chordSize}px Arial, Helvetica, sans-serif`;
+      const cw = label ? ctx.measureText(label + " ").width : 0;
       const wd = Math.max(ww, cw);
-      if (x + wd > maxW && row.length) { rows.push({ items: row }); row = []; x = 0; }
+      if (x + wd > maxW && row.length) flushLyrics(false);
       row.push({ w: w.word, c: label, x });
       x += wd;
     });
-    if (row.length) rows.push({ items: row, end: true });
+    if (compact) {
+      if (row.length) x += fontSize * 0.45;
+    } else {
+      flushLyrics();
+    }
   });
+  flushLyrics();
   const hasCh = (r) => r.items.some((it) => it.c);
-  rows.forEach((r) => { r.h = (showCh && hasCh(r) ? SH.CHH : 0) + SH.LH + (r.end ? SH.GAP : 0); r.hasCh = hasCh(r); });
+  rows.forEach((r) => {
+    if (r.type !== "lyrics") return;
+    r.hasCh = hasCh(r);
+    r.gap = r.end ? paragraphGap : 0;
+    r.h = (showCh && r.hasCh ? chordHeight : 0) + lineHeight + r.gap;
+  });
   return rows;
 }
 
-function sheetHeader() {
+function sheetHeader(ctx, fontSize) {
   const t = $("fileName").textContent.replace(/\.[^.]+$/, "") || "Canción";
   const sub = [];
   if (chords.length && $("showCh").checked) {
-    if (songKey) sub.push("Tono: " + shiftChord(songKey, transpose));
+    if (songKey) sub.push("Tono: " + displayChord(songKey, transpose));
     if (capo) sub.push("Capo en traste " + capo);
     else if (transpose) sub.push("Transpuesto " + (transpose > 0 ? "+" : "") + transpose);
   }
   const bpm = $("bpmTxt").textContent;
   if (/^\d/.test(bpm)) sub.push(bpm + " BPM");
-  return { title: t, sub: sub.join("  ·  ") };
+  let titleSize = Math.min(42, Math.max(20, Math.round(fontSize * 1.2)));
+  while (titleSize > 20) {
+    ctx.font = `bold ${titleSize}px Arial, Helvetica, sans-serif`;
+    if (ctx.measureText(t).width <= SH.W - 2 * SH.M) break;
+    titleSize -= 1;
+  }
+  const subSize = Math.max(12, Math.round(fontSize * 0.58));
+  let subtitle = sub.join("  ·  ");
+  ctx.font = `${subSize}px Arial, Helvetica, sans-serif`;
+  while (subtitle && ctx.measureText(subtitle).width > SH.W - 2 * SH.M) {
+    subtitle = subtitle.slice(0, -2).trimEnd() + "…";
+  }
+  return { title: t, sub: subtitle, titleSize, subSize };
 }
 
-// Dibuja un conjunto de filas en un canvas. `head` = encabezado (solo en la primera página).
-function paintSheet(cv, rows, head) {
+function headHeight(head) {
+  return head.titleSize * 1.3 + (head.sub ? head.subSize * 1.4 : 0) + 38;
+}
+
+function sheetLayout() {
+  const probe = document.createElement("canvas").getContext("2d");
+  const available = SH.H - 52;
+  const layoutAt = (fontSize, compact) => {
+    const rows = sheetRows(probe, fontSize, compact);
+    const head = sheetHeader(probe, fontSize);
+    return {
+      rows, head, fontSize, compact,
+      used: SH.M + headHeight(head) + rows.reduce((sum, row) => sum + row.h, 0),
+    };
+  };
+  const findBest = (compact) => {
+    let low = 4, high = SH.MAX_FONT, best = null;
+    for (let i = 0; i < 15; i++) {
+      const fontSize = (low + high) / 2;
+      const candidate = layoutAt(fontSize, compact);
+      if (candidate.used <= available) {
+        best = candidate;
+        low = fontSize;
+      } else high = fontSize;
+    }
+    return best || layoutAt(4, compact);
+  };
+  const regular = findBest(false);
+  const compact = findBest(true);
+  const best = compact.fontSize > regular.fontSize + 1 ? compact : regular;
+  const paragraphCount = best.rows.filter((row) => row.end).length;
+  const spare = Math.max(0, available - best.used);
+  const extraGap = paragraphCount > 1 ? spare / paragraphCount : 0;
+  best.topSpace = paragraphCount === 1 ? spare / 2 : 0;
+  best.rows.forEach((row) => {
+    if (row.end) {
+      row.gap += extraGap;
+      row.h += extraGap;
+    }
+  });
+  best.used += best.topSpace + extraGap * paragraphCount;
+  return best;
+}
+
+function paintSheet(cv, rows, head, fontSize, topSpace = 0) {
   const ctx = cv.getContext("2d");
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.textBaseline = "alphabetic";
   let y = SH.M;
   if (head) {
-    ctx.fillStyle = "#111"; ctx.font = "bold 52px Arial, Helvetica, sans-serif";
-    ctx.fillText(head.title, SH.M, y + 40); y += 62;
-    if (head.sub) { ctx.fillStyle = "#555"; ctx.font = "28px Arial, Helvetica, sans-serif"; ctx.fillText(head.sub, SH.M, y + 20); y += 36; }
-    ctx.strokeStyle = "#ccc"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(SH.M, y + 6); ctx.lineTo(cv.width - SH.M, y + 6); ctx.stroke();
-    y += 44;
-  }
-  rows.forEach((r) => {
-    if (r.hasCh) {
-      ctx.fillStyle = "#b45309"; ctx.font = `bold ${SH.CH}px Arial, Helvetica, sans-serif`;
-      r.items.forEach((it) => { if (it.c) ctx.fillText(it.c, SH.M + it.x, y + SH.CH); });
-      y += SH.CHH;
+    ctx.fillStyle = "#111"; ctx.font = `bold ${head.titleSize}px Arial, Helvetica, sans-serif`;
+    y += head.titleSize;
+    ctx.fillText(head.title, SH.M, y);
+    y += Math.ceil(head.titleSize * 0.3);
+    if (head.sub) {
+      ctx.fillStyle = "#555"; ctx.font = `${head.subSize}px Arial, Helvetica, sans-serif`;
+      y += head.subSize;
+      ctx.fillText(head.sub, SH.M, y);
+      y += Math.ceil(head.subSize * 0.4);
     }
-    ctx.fillStyle = "#111"; ctx.font = `${SH.LYR}px Arial, Helvetica, sans-serif`;
-    r.items.forEach((it) => ctx.fillText(it.w, SH.M + it.x, y + SH.LYR));
-    y += SH.LH + (r.end ? SH.GAP : 0);
+    ctx.strokeStyle = "#ddd"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(SH.M, y + 6); ctx.lineTo(cv.width - SH.M, y + 6); ctx.stroke();
+    y += 28;
+  }
+  y += topSpace;
+  rows.forEach((r) => {
+    if (r.type === "section") {
+      const size = Math.max(4, Math.round(fontSize * 0.68));
+      ctx.fillStyle = "#555";
+      ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
+      y += size;
+      ctx.fillText(r.label, SH.M, y);
+      y += Math.ceil(size * 0.1) + r.gap;
+      return;
+    }
+    if (r.type === "instrumental") {
+      ctx.fillStyle = "#9a4f00";
+      ctx.font = `bold ${r.chordSize}px Arial, Helvetica, sans-serif`;
+      r.chordLines.forEach((line) => {
+        y += r.chordSize;
+        ctx.fillText(line, SH.M, y);
+        y += Math.ceil(r.chordSize * 0.3);
+      });
+      y += r.gap;
+      return;
+    }
+    if (r.hasCh) {
+      const chordSize = Math.max(10, Math.round(fontSize * 0.78));
+      ctx.fillStyle = "#9a4f00"; ctx.font = `bold ${chordSize}px Arial, Helvetica, sans-serif`;
+      r.items.forEach((it) => { if (it.c) ctx.fillText(it.c, SH.M + it.x, y + chordSize); });
+      y += Math.ceil(chordSize * 1.2);
+    }
+    ctx.fillStyle = "#111"; ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
+    r.items.forEach((it) => ctx.fillText(it.w, SH.M + it.x, y + fontSize));
+    y += Math.ceil(fontSize * 1.28) + r.gap;
   });
-  ctx.fillStyle = "#9a9a9a"; ctx.font = "22px Arial, Helvetica, sans-serif";
+  ctx.fillStyle = "#9a9a9a"; ctx.font = "16px Arial, Helvetica, sans-serif";
   ctx.fillText("Hecho con Musiconvert", SH.M, cv.height - 48);
   return y;
-}
-
-function headHeight(head) { return 62 + (head.sub ? 36 : 0) + 44; }
-
-function sheetPages() {
-  const probe = document.createElement("canvas").getContext("2d");
-  const rows = sheetRows(probe), head = sheetHeader();
-  const pages = []; let cur = [], used = SH.M + headHeight(head);
-  rows.forEach((r) => {
-    if (used + r.h > SH.H - SH.M && cur.length) { pages.push(cur); cur = []; used = SH.M; }
-    cur.push(r); used += r.h;
-  });
-  pages.push(cur);
-  return { pages, head, rows };
 }
 
 function saveBlob(blob, name) {
@@ -1456,14 +2504,17 @@ function saveBlob(blob, name) {
 }
 const safeName = () => ($("fileName").textContent.replace(/\.[^.]+$/, "") || "cancion").replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]+/g, "").trim().slice(0, 60) || "cancion";
 
-function downloadPng() {
+async function downloadPng() {
   if (!lines.length) return setStatus("Primero genera la letra.", 0);
-  const { rows, head } = sheetPages();
-  const total = SH.M * 2 + headHeight(head) + rows.reduce((s, r) => s + r.h, 0);
+  const { rows, head, fontSize, topSpace } = sheetLayout();
   const cv = document.createElement("canvas");
-  cv.width = SH.W; cv.height = Math.max(total, 600);
-  paintSheet(cv, rows, head);
-  cv.toBlob((b) => { saveBlob(b, safeName() + ".png"); setStatus("Imagen descargada ✔", 1); }, "image/png");
+  cv.width = SH.W; cv.height = SH.H;
+  paintSheet(cv, rows, head, fontSize, topSpace);
+  const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("El navegador no pudo crear la imagen.");
+  saveBlob(blob, safeName() + ".png");
+  const compactNotice = fontSize < 14 ? " · letra larga, tamaño reducido" : "";
+  setStatus(`Imagen descargada en una hoja ✔ (texto a ${Math.round(fontSize)} px${compactNotice})`, 1);
 }
 
 // PDF mínimo hecho a mano: una imagen JPEG por página A4 (sin librerías externas).
@@ -1492,17 +2543,17 @@ function buildPdf(jpegs) {
 
 async function downloadPdf() {
   if (!lines.length) return setStatus("Primero genera la letra.", 0);
-  const { pages, head } = sheetPages(), jpegs = [];
-  for (let i = 0; i < pages.length; i++) {
-    const cv = document.createElement("canvas"); cv.width = SH.W; cv.height = SH.H;
-    paintSheet(cv, pages[i], i === 0 ? head : null);
-    const b = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.92));
-    jpegs.push(new Uint8Array(await b.arrayBuffer()));
-  }
+  const { rows, head, fontSize, topSpace } = sheetLayout();
+  const cv = document.createElement("canvas"); cv.width = SH.W; cv.height = SH.H;
+  paintSheet(cv, rows, head, fontSize, topSpace);
+  const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/jpeg", 0.92));
+  if (!blob) throw new Error("El navegador no pudo crear el PDF.");
+  const jpegs = [new Uint8Array(await blob.arrayBuffer())];
   saveBlob(buildPdf(jpegs), safeName() + ".pdf");
-  setStatus(`PDF descargado ✔ (${pages.length} página${pages.length > 1 ? "s" : ""})`, 1);
+  const compactNotice = fontSize < 14 ? " · letra larga, tamaño reducido" : "";
+  setStatus(`PDF descargado en una sola página ✔ (texto a ${Math.round(fontSize)} px${compactNotice})`, 1);
 }
-$("pngBtn").onclick = downloadPng;
+$("pngBtn").onclick = () => downloadPng().catch((e) => setStatus("No se pudo crear la imagen: " + e.message, 0));
 $("pdfBtn").onclick = () => downloadPdf().catch((e) => setStatus("No se pudo crear el PDF: " + e.message, 0));
 
 /* --------------------------------------------------------------- tempo y pulso */
@@ -1535,11 +2586,20 @@ function updateTempo(resetPhase) {
   if (resetPhase) {
     beatPhase = beatMode === 2 ? (2 * baseDown) % 4 : beatMode === 0.5 ? Math.floor(baseDown / 2) % 4 : baseDown % 4;
   }
-  $("bpmTxt").textContent = baseBpm ? (baseBpm * beatMode).toFixed(1) : "–";
+  const hasTempo = Number.isFinite(baseBpm) && baseBpm > 0;
+  const shownBpm = hasTempo ? baseBpm * beatMode : 0;
+  $("bpmTxt").textContent = hasTempo ? shownBpm.toFixed(1) : "–";
+  const halfMode = beatMode === 0.5 ? 1 : 0.5;
+  const doubleMode = beatMode === 2 ? 1 : 2;
+  $("bpmHalf").textContent = hasTempo ? `÷2 (${(baseBpm * halfMode).toFixed(1)})` : "÷2";
+  $("bpmDouble").textContent = hasTempo ? `×2 (${(baseBpm * doubleMode).toFixed(1)})` : "×2";
+  $("bpmInterpretation").textContent = hasTempo
+    ? `Lectura actual: ${shownBpm.toFixed(1)} BPM. Prueba ÷2 o ×2 y confirma con el pulso de la canción.`
+    : "No se detectó un pulso fiable; puedes tocar el ritmo para definir el BPM.";
   lastBeat = -1;
 }
-$("bpmHalf").onclick = () => { beatMode = beatMode === 2 ? 1 : 0.5; updateTempo(true); };
-$("bpmDouble").onclick = () => { beatMode = beatMode === 0.5 ? 1 : 2; updateTempo(true); };
+$("bpmHalf").onclick = () => { beatMode = beatMode === 0.5 ? 1 : 0.5; updateTempo(true); };
+$("bpmDouble").onclick = () => { beatMode = beatMode === 2 ? 1 : 2; updateTempo(true); };
 
 // ---- Tempo manual: toda la cuadrícula de pulsos se puede reconstruir a mano ----
 const NB = (x) => Math.round(x * 1000) / 1000;
@@ -1584,7 +2644,10 @@ function shiftBeats(dt) {
 }
 function setDownHere() {                       // el pulso más cercano a donde estás pasa a ser el "1"
   if (!shownBeats.length) { $("tapInfo").textContent = "Primero toca el ritmo."; return; }
-  beatPhase = nearestIdx(player.currentTime) % 4;
+  const phase = nearestIdx(player.currentTime) % 4;
+  adoptShown();
+  beatPhase = phase;
+  baseDown = phase;
   lastBeat = -1;
 }
 $("bpmMinus").onclick = () => nudgeBpm(-0.5);
@@ -1744,14 +2807,34 @@ $("syDown").onclick = () => { lyricShift = r2(Math.max(lyricShift - 0.1, -5)); s
 function tick() {
   const t = player.currentTime + lyricShift;
   beatTick();
+  const gapIdx = instrumentalGaps.findIndex((gap) =>
+    player.currentTime >= gap.start && player.currentTime < gap.end
+  );
+  if (gapIdx !== activeInstrumentalIdx) {
+    if (activeInstrumentalIdx >= 0) instrumentalEls[activeInstrumentalIdx]?.classList.remove("active");
+    activeInstrumentalIdx = gapIdx;
+    if (gapIdx >= 0 && instrumentalEls[gapIdx]) {
+      instrumentalEls[gapIdx].classList.add("active");
+      if (!player.paused) instrumentalEls[gapIdx].scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
   if (lines.length) {
     // línea activa = última que ya empezó (con 0.3 s de adelanto)
     let idx = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].start - 0.3 <= t) idx = i; else break;
+    if (gapIdx < 0) {
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].start - 0.3 <= t) idx = i; else break;
+      }
     }
     if (idx !== activeIdx) {
-      if (activeIdx >= 0 && lineEls[activeIdx]) lineEls[activeIdx].classList.remove("active");
+      const previousIdx = activeIdx;
+      if (previousIdx >= 0 && lineEls[previousIdx]) lineEls[previousIdx].classList.remove("active");
+      if (previousIdx >= 0) {
+        wordEls[previousIdx].forEach((span) => {
+          span.classList.remove("sung", "now");
+          span.parentElement.classList.remove("sung", "now");
+        });
+      }
       lineEls.forEach((el, i) => el.classList.toggle("past", i < idx));
       activeIdx = idx;
       if (idx >= 0 && lineEls[idx]) {
@@ -1784,6 +2867,39 @@ player.addEventListener("seeked", () => {
     if (i > activeIdx) spans.forEach((s) => s.classList.remove("sung", "now"));
   });
 });
+
+let deferredInstallPrompt = null;
+const installAppBtn = $("installAppBtn");
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installAppBtn.hidden = false;
+});
+installAppBtn.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  installAppBtn.hidden = true;
+  try {
+    await prompt.prompt();
+    const choice = await prompt.userChoice;
+    if (choice.outcome === "accepted") setStatus("Musiconvert se está instalando en tu teléfono.", 1);
+  } catch (error) {
+    setStatus("No se pudo iniciar la instalación: " + error.message, 0);
+  }
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  installAppBtn.hidden = true;
+});
+if (
+  "serviceWorker" in navigator &&
+  (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))
+) {
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+    .then((registration) => registration.update())
+    .catch((error) => console.error("No se pudo registrar la aplicación instalable.", error));
+}
 </script>
 </body>
 </html>

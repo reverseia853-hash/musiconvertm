@@ -1,10 +1,9 @@
 """
-Detección de acordes (mayores y menores) usando solo numpy + ffmpeg.
+Detección de acordes mayores, menores y séptimas usando numpy + ffmpeg.
 
-  audio -> STFT -> chroma (12 notas) -> plantillas de 24 acordes -> Viterbi
+  audio -> STFT -> chroma (12 notas) -> plantillas de acordes -> Viterbi
 
-Es una detección sencilla: acierta bien en canciones de acordes básicos
-(guitarra y voz), pero no distingue séptimas, suspendidos, etc.
+Las séptimas se aceptan solo cuando superan claramente la evidencia de su tríada.
 """
 from __future__ import annotations
 
@@ -17,14 +16,20 @@ import rhythm
 
 SR = 22050
 # Ajustes del decodificador (calibrados con un banco de canciones sintéticas difíciles):
-#   bass  = peso de la evidencia del bajo para decidir la raíz
+#   bass  = peso de la evidencia del bajo para decidir la raíz (su ventana cubre más de un pulso)
 #   tol7  = tolerancia a séptimas/novenas en las plantillas
-#   prior = penalización por cambiar de acorde fuera del inicio de compás (o medio compás)
 #   stay  = probabilidad de seguir en el mismo acorde de un pulso al siguiente
-CFG = dict(bass=1.5, tol7=0.4, prior=2.0, stay=0.7, b3=0.5, b5=0.4)
+CFG = dict(bass=0.4, tol7=0.4, stay=0.1, b3=0.5, b5=0.4)
 N_FFT = 8192   # ventana de ~0.37 s: resolución suficiente para notas graves de guitarra
 HOP = 2048     # un cuadro cada ~0.093 s
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+TRIAD_COUNT = 24
+SEVENTH_COUNT = 36
+CHORD_COUNT = TRIAD_COUNT + SEVENTH_COUNT
+NO_CHORD_STATE = TRIAD_COUNT
+SEVENTH_STATE_START = NO_CHORD_STATE + 1
+SEVENTH_MIN_MARGIN = 0.035
+SEVENTH_MIN_SEPARATION = 0.02
 
 # Perfiles de tonalidad de Krumhansl-Kessler
 _KK_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
@@ -158,8 +163,8 @@ def bass_chroma(y: np.ndarray, n_frames: int, sr: int = SR) -> np.ndarray:
 
 
 def _templates() -> np.ndarray:
-    """24 plantillas (12 mayores + 12 menores), normalizadas."""
-    T = np.zeros((24, 12), dtype=np.float32)
+    """Plantillas de 24 tríadas y 36 séptimas, normalizadas."""
+    T = np.zeros((CHORD_COUNT, 12), dtype=np.float32)
     for r in range(12):
         T[r, [r, (r + 4) % 12, (r + 7) % 12]] = [1.0, 0.85, 0.95]
         T[12 + r, [r, (r + 3) % 12, (r + 7) % 12]] = [1.0, 0.85, 0.95]
@@ -168,6 +173,14 @@ def _templates() -> np.ndarray:
                 for off, w in ((10, 1), (11, 1), (2, 0.8)):   # 7ª menor, 7ª mayor, 9ª
                     if (off - third) % 12 != 0:
                         T[tpl, (r + off) % 12] += CFG["tol7"] * w
+        for tpl, third, seventh in (
+            (24 + r, 4, 10),  # dominante
+            (36 + r, 4, 11),  # mayor
+            (48 + r, 3, 10),  # menor
+        ):
+            T[tpl, [r, (r + third) % 12, (r + 7) % 12, (r + seventh) % 12]] = [
+                1.0, 0.85, 0.95, 1.5,
+            ]
     return T / np.linalg.norm(T, axis=1, keepdims=True)
 
 
@@ -214,7 +227,15 @@ def _viterbi(emit: np.ndarray, stay: float = 0.93, extra: np.ndarray | None = No
 
 
 def _name(i: int) -> str:
-    return NOTES[i % 12] + ("m" if i >= 12 else "")
+    if i < 12:
+        return NOTES[i]
+    if i < TRIAD_COUNT:
+        return NOTES[i - 12] + "m"
+    if i < 36:
+        return NOTES[i - TRIAD_COUNT] + "7"
+    if i < 48:
+        return NOTES[i - 36] + "maj7"
+    return NOTES[i - 48] + "m7"
 
 
 def detect(audio: Path, min_seconds: float | None = None) -> dict:
@@ -284,60 +305,75 @@ def detect_signal(
         if repeat:
             agg = _nonlocal_smooth(agg)
         stay = CFG["stay"] if CFG["stay"] else stay_beat
-        period = float(np.median(np.diff(bounds[:-1])))
         if min_seconds is None:
-            min_seconds = max(0.5, 1.5 * period)
+            # La cuadrícula ya limita los cambios; no borrar acordes de un solo pulso.
+            min_seconds = 0.0
     else:
         bounds = np.concatenate([[0.0], center[:-1] + hop_s / 2, [dur]]) if len(ch) else np.array([0.0, dur])
         aggregate = lambda m: m  # noqa: E731
         agg, agg_energy, stay = ch, energy, stay_frame
         if min_seconds is None:
-            min_seconds = 0.5
+            min_seconds = 0.2
 
     # ---- decodificación de acordes
     key_root, key_minor = estimate_key(ch.sum(axis=0))
     norm = np.linalg.norm(agg, axis=1, keepdims=True)
-    scores = (agg / (norm + 1e-9)) @ _templates().T       # similitud coseno [N,24]
+    normalized = agg / (norm + 1e-9)
+    templates = _templates()
+    scores = normalized @ templates[:TRIAD_COUNT].T
+    seventh_scores = normalized @ templates[TRIAD_COUNT:].T
     for i in _diatonic(key_root, key_minor):               # pequeño empuje a los acordes de la tonalidad
         scores[:, i] += 0.04
+        root = i % 12
+        seventh_indices = (root, 12 + root) if i < 12 else (24 + root,)
+        seventh_scores[:, seventh_indices] += 0.04
     if CFG["bass"]:                                        # evidencia del bajo: ¿la nota grave es la raíz?
         bn = aggregate(bass_chroma(y, len(ch), sr))
         bn = bn / (bn.sum(axis=1, keepdims=True) + 1e-9)
-        B = np.zeros((24, 12), dtype=np.float32)       # cuánto apoya al acorde cada nota que toca el bajo
+        B = np.zeros((TRIAD_COUNT, 12), dtype=np.float32)  # apoyo de las notas del bajo al acorde
+        seventh_B = np.zeros((SEVENTH_COUNT, 12), dtype=np.float32)
         for r in range(12):
             for tpl, third in ((r, 4), (12 + r, 3)):
                 B[tpl, r] = 1.0                        # raíz
                 B[tpl, (r + third) % 12] = CFG["b3"]   # tercera (acorde invertido, ej. C/E)
                 B[tpl, (r + 7) % 12] = CFG["b5"]       # quinta (ej. C/G)
+            for tpl, third in (
+                (r, 4), (12 + r, 4), (24 + r, 3),
+            ):
+                seventh_B[tpl, r] = 1.0
+                seventh_B[tpl, (r + third) % 12] = CFG["b3"]
+                seventh_B[tpl, (r + 7) % 12] = CFG["b5"]
         scores += CFG["bass"] * bn @ B.T
+        seventh_scores += CFG["bass"] * bn @ seventh_B.T
     silent = agg_energy < 0.15 * np.median(agg_energy)
     scores = np.concatenate([scores, np.zeros((len(scores), 1), dtype=np.float32)], axis=1)
-    scores[silent, :24] = 0.0
-    scores[silent, 24] = 1.0                               # estado "sin acorde"
+    scores[silent, :TRIAD_COUNT] = 0.0
+    scores[silent, NO_CHORD_STATE] = 1.0                    # estado "sin acorde"
 
     logits = 10.0 * scores
     mx = logits.max(axis=1, keepdims=True)
     emit = logits - (mx + np.log(np.exp(logits - mx).sum(axis=1, keepdims=True)))  # log-softmax
     path = _viterbi(emit, stay)
+    classified_path = path.copy()
+    for t, triad in enumerate(path):
+        if triad >= TRIAD_COUNT:
+            continue
+        root = int(triad) % 12
+        candidates = (root, 12 + root) if triad < 12 else (24 + root,)
+        values = seventh_scores[t, candidates]
+        order = np.argsort(values)[::-1]
+        best_index = int(order[0])
+        best_score = float(values[best_index])
+        second_score = float(values[order[1]]) if len(order) > 1 else float("-inf")
+        if (
+            best_score - float(scores[t, triad]) >= SEVENTH_MIN_MARGIN
+            and best_score - second_score >= SEVENTH_MIN_SEPARATION
+        ):
+            classified_path[t] = SEVENTH_STATE_START + candidates[best_index]
     full = _extend(beats, dur) if beat_mode else None
-    if CFG["prior"] and beat_mode:                         # 2ª pasada: los acordes cambian en el compás
-        counts = np.zeros(4)
-        for t in np.nonzero(np.diff(path))[0] + 1:
-            counts[int(np.argmin(np.abs(full - bounds[t]))) % 4] += 1
-        d0 = int(np.argmax(counts)) if counts.sum() else 0
-        pen = np.zeros(len(path))
-        per = float(np.median(np.diff(full)))
-        for t in range(1, len(path)):
-            j = int(np.argmin(np.abs(full - bounds[t])))
-            if abs(full[j] - bounds[t]) > 0.2 * per:
-                pen[t] = 1.5 * CFG["prior"]
-            else:
-                pos = (j - d0) % 4
-                pen[t] = 0.0 if pos == 0 else 0.3 * CFG["prior"] if pos == 2 else CFG["prior"]
-        path = _viterbi(emit, stay, pen)
 
     segs: list[list] = []  # [inicio, fin, estado, intervalo_ini, intervalo_fin]
-    for i, s in enumerate(path):
+    for i, s in enumerate(classified_path):
         a, b = float(bounds[i]), float(bounds[i + 1])
         if segs and segs[-1][2] == s:
             segs[-1][1], segs[-1][4] = b, i + 1
@@ -368,14 +404,31 @@ def detect_signal(
 
     out = []
     for a, b, s, i0, i1 in segs:
-        if s >= 24:
+        if s == NO_CHORD_STATE:
             continue
-        mean = scores[i0:i1, :24].mean(axis=0)       # puntaje medio de cada acorde en este tramo
-        alts = [_name(int(k)) for k in np.argsort(mean)[::-1] if int(k) != s][:3]
-        sc = scores[i0:i1, :24]
-        margin = float(np.mean(sc[:, s] - np.max(np.delete(sc, s, axis=1), axis=1)))   # ventaja sobre el 2º
+        is_seventh = s >= SEVENTH_STATE_START
+        chord_index = s - 1 if is_seventh else s
+        triad_index = chord_index
+        if is_seventh:
+            seventh_index = chord_index - TRIAD_COUNT
+            root = seventh_index % 12
+            triad_index = root if seventh_index < 24 else 12 + root
+        mean = scores[i0:i1, :TRIAD_COUNT].mean(axis=0)
+        alts = [_name(int(k)) for k in np.argsort(mean)[::-1] if int(k) != triad_index][:3]
+        sc = scores[i0:i1, :TRIAD_COUNT]
+        if is_seventh:
+            all_scores = np.concatenate(
+                [sc, seventh_scores[i0:i1]], axis=1,
+            )
+            chosen = chord_index
+        else:
+            all_scores = sc
+            chosen = s
+        margin = float(
+            np.mean(all_scores[:, chosen] - np.max(np.delete(all_scores, chosen, axis=1), axis=1))
+        )
         conf = float(np.clip((margin + 0.1) / 0.6, 0.0, 1.0))                          # 0 = dudoso, 1 = seguro
-        out.append({"start": round(a, 2), "end": round(b, 2), "chord": _name(s), "alts": alts,
+        out.append({"start": round(a, 2), "end": round(b, 2), "chord": _name(chord_index), "alts": alts,
                     "conf": round(conf, 2)})
 
     # ---- tempo, pulsos y primer tiempo del compás (4/4 estimado por dónde cambian los acordes)

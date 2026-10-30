@@ -35,15 +35,50 @@ pip install -r requirements.txt
 pip install --no-deps demucs==4.1.0
 ```
 
+### Windows local (CPU)
+
+Para esta versión de PyTorch usa Python 3.12. Desde la carpeta raíz del proyecto:
+
+```powershell
+py -3.12 -m venv .venv-4
+.\.venv-4\Scripts\python.exe -m pip install --upgrade pip
+.\.venv-4\Scripts\python.exe -m pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple torch==2.5.1+cpu torchaudio==2.5.1+cpu
+.\.venv-4\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv-4\Scripts\python.exe -m pip install --no-deps demucs==4.1.0
+```
+
+Con FFmpeg instalado, abre `Iniciar-Musiconvert.bat`. El servidor solo escucha en `127.0.0.1`; los archivos procesados localmente no se envían a Render. El modelo `small` es el predeterminado; en **Opciones > Calidad** puedes elegir `medium` para priorizar la letra, a costa de más tiempo y memoria. La primera transcripción descargará el modelo elegido y lo conservará en la caché de Hugging Face.
+
 ## Ejecutar
 
 ```bash
+cd karaoke-app/backend
 uvicorn main:app --reload
 ```
 
 Abre http://127.0.0.1:8000 en el navegador, elige una canción y espera.
 
 > La primera vez se descarga el modelo de Whisper (~500 MB para `small`). Después queda en caché.
+
+El BPM se estima con seguimiento de pulsos de librosa. Algunas canciones admiten una lectura a mitad o al doble del pulso; los botones `÷2` y `×2` muestran el valor alternativo y permiten compararlo con el ritmo oído. El BPM sirve como referencia temporal, pero los acordes pueden cambiar entre pulsos o durar varios.
+
+En **Opciones > Modo de letra** puedes elegir por canción: **Actual (con VAD)** usa el filtro sensible al canto (`threshold=0.15`); **Sin VAD** analiza sin ese filtro, con un tamaño de búsqueda mínimo de 5; **Comparar ambas** ejecuta las dos pasadas sobre la misma fuente de audio y deja elegir cuál conservar. El modo de comparación tarda más porque realiza dos transcripciones y no combina automáticamente las letras: la versión con VAD queda activa mientras revisas ambas. Todos los modos mantienen `no_speech_threshold=0.6` para limitar texto inventado sobre la música. La separación de voz es otra opción independiente y se aplica antes del modo elegido cuando está activada. Sin VAD pueden aparecer palabras incorrectas sobre pausas o partes instrumentales; comparar más resultados no garantiza que una versión sea correcta.
+
+La opción **Nivel de aislamiento** ajusta las pasadas de Demucs para intentar separar mejor una voz mezclada con instrumentos: **Poco** mantiene los valores rápidos actuales (1 shift, overlap 0.1), **Medio** usa 2 shifts y overlap 0.25, y **Mucho** usa 4 shifts y overlap 0.5. Los niveles superiores pueden tardar considerablemente más y no garantizan una transcripción más precisa. Si se desactiva **Separar voz**, el nivel de aislamiento no se aplica.
+
+En el modo actual, si una canción de al menos un minuto produce menos de 8 palabras por minuto o deja sin letra un tramo final de más de 12 segundos o el 8% de la duración (lo que sea mayor), la página ofrece iniciar manualmente la segunda transcripción sin VAD. La primera versión se conserva para poder comparar y restaurar.
+
+No se aplican filtros predefinidos por género (pop, cristiano, country): el género no es un filtro de voz, y orientar el prompt hacia un género sin conocer la letra puede sesgar palabras en vez de recuperarlas. Para priorizar la letra se puede elegir el modelo `medium` en **Opciones > Calidad**, a costa de mayor tiempo y memoria.
+
+La exportación a imagen y PDF usa siempre una sola hoja A4 vertical. En los tramos instrumentales muestra únicamente una línea con los acordes, sin rótulos ni tiempos; no añade filas cuando no hay acordes. Las secciones con letra separadas por al menos 2.5 segundos se marcan como “Sección”. También busca bloques de dos o más líneas de letra que se repitan exactamente tras normalizar mayúsculas, tildes y puntuación: los bloques de al menos ocho palabras se marcan como “Coro”; los de seis o siete palabras solo si además coincide su secuencia de acordes. Cada aparición se conserva y se etiqueta, sin eliminar ni alterar letra o tiempos. La separación temporal por sí sola no se presenta como detección segura de estrofa, y la repetición es una señal práctica, no una clasificación musical infalible. La copia de la hoja de acordes aplica las mismas etiquetas. El tamaño del texto se adapta al contenido y al espacio disponible; las canciones muy largas pueden producir texto más pequeño.
+
+Para los acordes, los cambios se evalúan sobre la cuadrícula de pulsos cuando el tempo es confiable. El detector no supone que solo pueden cambiar al inicio o a la mitad del compás y conserva los cambios de un solo pulso; sin una cuadrícula confiable, solo suaviza fluctuaciones muy breves. Reconoce acordes mayores, menores y séptimas dominante (`7`), mayor (`maj7`) y menor (`m7`). Solo muestra una séptima cuando su evidencia supera claramente la de la tríada correspondiente; si no, conserva la mayor o menor. Los acordes con poca evidencia se marcan como dudosos para revisarlos. La detección sigue siendo orientativa: puede equivocarse en canciones comerciales y requiere escuchar y corregir los resultados cuando sea necesario.
+
+Los acordes detectados en intervalos sin letra también se muestran en filas instrumentales al inicio, entre frases y al final de la canción. La vista usa los mismos acordes y tiempos que el análisis; no realiza un procesamiento adicional.
+
+En **Acordes > Cifrado** puedes alternar entre nombres de acordes internacionales (`C`, `Dm`, `G7`) y nombres latinos (`Do`, `Rem`, `Sol7`). La opción solo cambia la presentación: el análisis, los acordes almacenados, la transposición y las correcciones conservan el cifrado interno original. El cambio se refleja en la vista, el editor de acordes y las exportaciones. La herramienta para medir acierto sigue esperando acordes reales escritos con nombres internacionales (`C D E F G A B`).
+
+Pruebas locales del análisis: desde la carpeta `backend`, ejecuta `..\.venv-4\Scripts\python.exe -m unittest discover -s tests -v`. Incluyen tempos sintéticos, acordes mayores/menores y séptimas en las 12 tonalidades, una comprobación para evitar convertir una tríada con una séptima débil, progresiones repetidas y cambios de acorde en pulsos consecutivos a 145 BPM; son comprobaciones de funcionamiento, no una medición de precisión en canciones comerciales.
 
 ## Modelo y velocidad (sin GPU)
 
@@ -92,7 +127,7 @@ karaoke-app/
 ## Problemas comunes
 
 - **`ffmpeg not found`**: instálalo y reinicia la terminal.
-- **Letra con errores o texto inventado**: normal en música con mucho instrumental. La Fase 2 (separar la voz con Demucs) lo mejora bastante.
+- **Letra con errores o texto inventado**: puede ocurrir en música por la mezcla, los efectos o las voces de fondo. Demucs puede ayudar en algunas canciones, pero la separación no siempre mejora la transcripción; compara con y sin esa opción.
 - **Muy lento**: usa `WHISPER_MODEL=base`.
 
 ## Desplegar en Render
@@ -114,22 +149,21 @@ Para publicar, el proyecto debe estar en un repositorio Git conectado a Render. 
 3. Móvil y accesibilidad
 4. Progreso, errores y recuperación
 5. Pulido y preparación para despliegue (completada)
-6. Despliegue de demostración gratuito en Render (en curso)
+6. Despliegue de demostración gratuito en Render (completada)
 
-### Lista segura antes de publicar el repositorio
+### Estado del despliegue
 
-1. Instala Git y crea un repositorio **privado** para el proyecto.
-2. Comprueba que `.gitignore` excluye los entornos virtuales, `backend/uploads/` y archivos `.env`; nunca subas contraseñas, tokens ni audio de usuarios.
-3. Sube el código desde tu equipo y conecta ese repositorio a Render usando **New > Blueprint**.
-4. Antes de aplicar el Blueprint, confirma que el plan sea `free` y que el costo sea `$0`.
-5. Introduce `APP_PASSWORD` directamente en la configuración secreta de Render (mínimo 16 caracteres). No la pongas en el repositorio, un archivo compartido ni el chat. Render genera `APP_SESSION_SECRET`.
-6. Tras el primer despliegue, verifica `/api/health`, la pantalla de acceso, un inicio/cierre de sesión y un audio corto. El estado `/api/health` solo indica que la API responde; no confirma que los modelos ya estén cargados.
+La demo gratuita está publicada en Render y su ruta `/api/health` respondió correctamente durante la comprobación inicial. El perfil de Render es limitado y está pensado para demostración; para uso personal, se recomienda iniciar la versión local con `Iniciar-Musiconvert.bat`. Los cambios locales de este proyecto no se publican automáticamente en Render.
 
-**El despliegue queda pendiente** hasta que el propietario cree y conecte el repositorio y confirme el costo del servicio. No hay Git, Docker ni credenciales de Render configurados en este entorno, por lo que no se ha creado ni publicado ningún servicio.
+### Instalar Musiconvert en Android
+
+Musiconvert puede instalarse como aplicación web progresiva (PWA), no como APK. Publica los cambios en el servicio HTTPS y abre su dirección en Chrome para Android; desde el menú del navegador elige **Instalar aplicación** o **Añadir a pantalla de inicio**. En navegadores compatibles también aparecerá el botón **Instalar app**. La PWA consulta la versión publicada al abrirse y recibe las actualizaciones al desplegar nuevos cambios. Necesita conexión a Internet y no guarda canciones, sesiones ni respuestas en caché; no funciona sin conexión.
+
+La instalación gratuita usa los mismos límites de la demo de Render: el procesamiento puede ser lento o interrumpirse, y el perfil gratuito limita la duración y el tamaño de audio, además de desactivar separación de voz y detección de acordes. Para compartir la demo, todos usan la misma contraseña configurada en Render; no hay cuentas separadas. La aplicación no se publica ni se actualiza en el teléfono hasta que los cambios se desplieguen al servicio. No subas canciones privadas o sensibles a la demo pública.
 
 ## Fase 2: YouTube y separación de voz
 
 - Pega un link de YouTube (un solo video, máx. 12 min) y pulsa **Generar**.
-- La casilla **Separar voz** aísla la voz con Demucs antes de transcribir: tarda varios minutos más en CPU, pero omite y confunde menos palabras. Desmárcala para ir rápido.
+- La casilla **Separar voz** usa Demucs antes de transcribir: puede ayudar en algunas canciones, pero tarda más en CPU y el resultado depende de la mezcla. Compara con y sin separación si la letra no sale bien.
 - Variables nuevas: `DEMUCS_MODEL` (por defecto `htdemucs`) y `MAX_MINUTES`.
 - YouTube necesita Deno instalado y `yt-dlp` actualizado (`pip install -U "yt-dlp[default]"`). Para instalación manual, usa `pip install --no-deps demucs==4.1.0`.
